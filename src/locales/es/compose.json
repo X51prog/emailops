@@ -34,6 +34,8 @@
   "linkPrompt": "Introduce la URL",
   "font": "Fuente",
   "defaultFont": "Fuente predeterminada",
+  "fontSize": "Tamaño de fuente",
+  "defaultFontSize": "Tamaño predeterminado",
   "showCc": "Añadir Cc",
   "showBcc": "Añadir Cco",
   "minimize": "Minimizar",

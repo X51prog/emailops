@@ -34,6 +34,8 @@
   "linkPrompt": "URL eingeben",
   "font": "Schriftart",
   "defaultFont": "Standardschrift",
+  "fontSize": "Schriftgröße",
+  "defaultFontSize": "Standardgröße",
   "showCc": "Cc hinzufügen",
   "showBcc": "Bcc hinzufügen",
   "minimize": "Minimieren",

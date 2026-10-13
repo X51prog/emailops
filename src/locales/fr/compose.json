@@ -34,6 +34,8 @@
   "linkPrompt": "Saisissez l'URL",
   "font": "Police",
   "defaultFont": "Police par défaut",
+  "fontSize": "Taille de police",
+  "defaultFontSize": "Taille par défaut",
   "showCc": "Ajouter Cc",
   "showBcc": "Ajouter Cci",
   "minimize": "Réduire",

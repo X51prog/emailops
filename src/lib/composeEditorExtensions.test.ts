@@ -396,3 +396,31 @@ describe('composeEditorExtensions — font family', () => {
     editor.destroy();
   });
 });
+
+describe('composeEditorExtensions — font size', () => {
+  it('sets the size of the selected text and keeps its font', () => {
+    const editor = createEditor('<p><span style="font-family: Georgia, serif">Hello</span></p>');
+    editor.chain().selectAll().setFontSize('18px').run();
+    const span = parse(editor.getHTML()).querySelector('span');
+    expect(span?.style.fontSize).toBe('18px');
+    expect(span?.style.fontFamily).toBe('Georgia, serif');
+    editor.destroy();
+  });
+
+  it('replaces the size a webmail draft carried', () => {
+    const editor = createEditor('<p><span style="font-size: 10pt; color: red">Hello</span></p>');
+    editor.chain().selectAll().setFontSize('24px').run();
+    const span = parse(editor.getHTML()).querySelector('span');
+    expect(span?.getAttribute('style')?.match(/font-size/g)).toHaveLength(1);
+    expect(span?.style.fontSize).toBe('24px');
+    expect(span?.style.color).toBe('red');
+    editor.destroy();
+  });
+
+  it('goes back to the default size', () => {
+    const editor = createEditor('<p><span style="font-size: 18px">Hello</span></p>');
+    editor.chain().selectAll().unsetFontSize().run();
+    expect(editor.getHTML()).toBe('<p>Hello</p>');
+    editor.destroy();
+  });
+});
