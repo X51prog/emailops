@@ -45,10 +45,10 @@ Why the task exists and what it touches.
 - The board's **Open in Claude** button is a `claude-cli://` deep link that
   opens a terminal with `/work-on-task T-NNNN` typed in. **Copy command** puts
   the same command on the clipboard when the link handler is not registered.
-- `make task-handler` (macOS, run from the main checkout): registers the
-  `emailops-task://` scheme. From the next `make tasks-html` on, the button
-  reads **Open in Herdr**: it focuses the task's agent if Herdr already runs
-  one, otherwise it creates (or reuses) the task's worktree
-  `.claude/worktrees/T-NNNN-slug` on `feature/T-NNNN-slug`, opens a Herdr tab
-  there, starts Claude and types `/work-on-task T-NNNN` (not sent). Delete
-  `~/Applications/EmailOps Task Handler.app` to go back to the deep link.
+- `make tasks-serve`: the same board served live on `127.0.0.1:8780` (the
+  printed URL carries a random token; leave it running in a terminal or Herdr
+  pane). Every refresh re-reads the worktrees, so it needs no hook, and the page
+  updates in place every 5 seconds. **Open in Herdr** focuses the task's agent
+  if Herdr already runs one, otherwise it creates (or reuses) the task's
+  worktree `.claude/worktrees/T-NNNN-slug` on `feature/T-NNNN-slug`, opens a
+  Herdr tab there, starts Claude and types `/work-on-task T-NNNN` (not sent).

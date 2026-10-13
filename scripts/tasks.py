@@ -15,30 +15,34 @@ Usage:
       (branch, last commit, dirty files, commits ahead of origin/main, minutes since
       the last change, and whether an agent is on it: a claude process inside it or a
       change in the last 10 minutes) and write one self-contained page. Default output:
-      <main checkout>/tasks/index.html (gitignored). Read-only otherwise. When the
-      emailops-task:// handler is installed (make task-handler), "Open" goes to Herdr.
-  tasks.py open-in-herdr URL
-      Handle an emailops-task://open?task=T-NNNN link: focus the task's agent if
-      Herdr already runs one, otherwise create (or reuse) the task's worktree,
-      open a Herdr tab there, start Claude and type /work-on-task T-NNNN without
-      sending it. Starting in the worktree, not the main checkout, means the
-      session sees the repo's skills whatever branch the main checkout is on.
+      <main checkout>/tasks/index.html (gitignored). Read-only otherwise.
+  tasks.py serve [--port N]
+      Serve the same board live on 127.0.0.1 (a random token in the URL guards it):
+      every request re-reads the worktrees and the page refreshes in place. Its
+      "Open in Herdr" button focuses the task's agent if Herdr already runs one,
+      otherwise creates (or reuses) the task's worktree, opens a Herdr tab there,
+      starts Claude and types /work-on-task T-NNNN without sending it. Starting in
+      the worktree, not the main checkout, means the session sees the repo's skills
+      whatever branch the main checkout is on.
 """
 
 # The URL handler runs macOS /usr/bin/python3 (3.9): keep annotations lazy.
 from __future__ import annotations
 
 import argparse
+import hmac
 import html
 import json
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import sys
 import time
 from dataclasses import dataclass
 from datetime import datetime
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlsplit
 
@@ -50,9 +54,9 @@ ID_RE = re.compile(r"^T-\d{4}$")
 MAIN = "main"  # label of the main checkout
 RELOAD_SECONDS = 20
 ACTIVE_MINUTES = 10  # a worktree changed this recently counts as having an agent on it
-SCHEME = "emailops-task"
+PORT = 8780
+POLL_SECONDS = 5  # the served page re-reads the board this often
 TASK_BASE = "chore/sdlc-automation"  # TODO: origin/main once this branch is merged (work-on-task lives there)
-HANDLER_APP = Path.home() / "Applications" / "EmailOps Task Handler.app"  # installed by make task-handler
 
 
 @dataclass
@@ -158,23 +162,6 @@ def deep_link(task_id, repo):
     return f"claude-cli://open?q={quote('/work-on-task ' + task_id, safe='')}&repo={quote(repo, safe='')}"
 
 
-def herdr_link(task_id):
-    """emailops-task:// link, handled by open-in-herdr once make task-handler installed it."""
-    return f"{SCHEME}://open?task={task_id}"
-
-
-def task_from_url(url):
-    """The task id in an emailops-task:// link. Pure.
-
-    Any web page can fire the scheme, so anything but one well-formed id is refused.
-    """
-    parts = urlsplit(url)
-    ids = parse_qs(parts.query).get("task", [])
-    if parts.scheme != SCHEME or parts.netloc != "open" or len(ids) != 1 or not ID_RE.match(ids[0]):
-        raise ValueError(f"not a task link: {url!r}")
-    return ids[0]
-
-
 def task_worktree(file_name, root):
     """(path, branch) of a task's worktree, named after its file: T-0002-slug.md. Pure."""
     stem = Path(file_name).stem
@@ -193,8 +180,22 @@ def pick_workspace(workspaces, label):
     return hits[0]["workspace_id"] if hits else None
 
 
-def render_html(tasks, worktrees, repo, generated, warnings=(), launcher="claude"):
-    """The board as one self-contained page. Pure."""
+def authorized(method, path, headers, token, port):
+    """Whether a request may reach the served board. Pure.
+
+    Any page open in the browser can send requests to 127.0.0.1, and the board can
+    start agents: require the URL token, a local Host (a rebound DNS name keeps its
+    own), and on POST a local Origin.
+    """
+    local = {f"127.0.0.1:{port}", f"localhost:{port}"}
+    given = parse_qs(urlsplit(path).query).get("token", [""])[0]
+    if headers.get("Host") not in local or not hmac.compare_digest(given, token):
+        return False
+    return method != "POST" or headers.get("Origin", "").removeprefix("http://") in local
+
+
+def render_html(tasks, worktrees, repo, generated, warnings=(), token=None):
+    """The board as one self-contained page; with a token, the live page tasks.py serve returns. Pure."""
     e = html.escape
     milestones = sorted({t.milestone for t in tasks})
     columns = []
@@ -215,13 +216,16 @@ def render_html(tasks, worktrees, repo, generated, warnings=(), launcher="claude
                     f"<span>{wt.dirty} changed · {wt.ahead} ahead of origin/main · last change {wt.idle_min} min ago</span></div>"
                 )
             command = f'claude "/work-on-task {t.id}"'
-            open_href, open_label = (herdr_link(t.id), "Open in Herdr") if launcher == "herdr" else (deep_link(t.id, repo), "Open in Claude")
+            if token:
+                launch = f'<button class="btn primary" data-launch="{e(t.id)}">Open in Herdr</button>'
+            else:
+                launch = f'<a class="btn primary" href="{e(deep_link(t.id, repo))}">Open in Claude</a>'
             cards.append(
                 f'<article class="card" id="{e(t.id)}" data-milestone="{e(t.milestone)}" '
                 f'data-text="{e((t.id + " " + t.title + " " + t.body).lower())}">'
                 f'<header><span class="tid">{e(t.id)}</span>{"".join(meta)}</header>'
                 f'<h3>{e(t.title)}</h3>{activity}'
-                f'<div class="actions"><a class="btn primary" href="{e(open_href)}">{open_label}</a>'
+                f'<div class="actions">{launch}'
                 f'<button class="btn" data-copy="{e(command)}">Copy command</button>'
                 f'<button class="btn" data-open="{e(t.id)}">Details</button></div>'
                 f'<pre class="body" hidden>{e(t.body)}</pre></article>'
@@ -237,8 +241,26 @@ def render_html(tasks, worktrees, repo, generated, warnings=(), launcher="claude
         options=options,
         notes=notes,
         columns="".join(columns),
-        reload_ms=RELOAD_SECONDS * 1000,
+        token=json.dumps(token or ""),
+        refresh=(SERVE_JS % (POLL_SECONDS * 1000)) if token else (STATIC_JS % (RELOAD_SECONDS * 1000)),
     )
+
+
+# Static file: regenerated by a hook whenever an agent edits a task; reload to pick it up, but not mid-typing.
+STATIC_JS = "setInterval(() => { if (document.activeElement !== q) location.reload(); }, %d);"
+
+# Served page: swap in a fresh board without losing scroll, filter or the open panel.
+SERVE_JS = """setInterval(async () => {
+  if (document.activeElement === q) return;
+  try {
+    const r = await fetch("/?token=" + TOKEN, { cache: "no-store" });
+    if (!r.ok) throw new Error(r.status);
+    const doc = new DOMParser().parseFromString(await r.text(), "text/html");
+    for (const sel of [".board", "#notes", ".gen"]) document.querySelector(sel).innerHTML = doc.querySelector(sel).innerHTML;
+    apply();
+    if (!panel.hidden) openTask(readHash().open);
+  } catch (err) { document.querySelector(".gen").textContent = "Board server unreachable (" + err.message + ")"; }
+}, %d);"""
 
 
 PAGE = """<!doctype html>
@@ -280,10 +302,11 @@ input, select {{ font:inherit; padding:5px 8px; border:1px solid var(--line); bo
 <select id="ms"><option value="">All milestones</option>{options}</select>
 <input id="q" type="search" placeholder="Search">
 <span class="gen">Generated {generated}</span></div>
-{notes}
+<div id="notes">{notes}</div>
 <main class="board">{columns}</main>
 <aside id="panel" hidden><button class="btn" id="close">Close</button><h2 id="ptitle"></h2><pre id="pbody"></pre></aside>
 <script>
+const TOKEN = {token};
 const ms = document.getElementById("ms"), q = document.getElementById("q"), panel = document.getElementById("panel");
 function readHash() {{ const p = new URLSearchParams(location.hash.slice(1)); return {{ ms: p.get("ms") || "", q: p.get("q") || "", open: p.get("open") || "" }}; }}
 function writeHash(open) {{ const p = new URLSearchParams(); if (ms.value) p.set("ms", ms.value); if (q.value) p.set("q", q.value); if (open) p.set("open", open); history.replaceState(null, "", "#" + p); }}
@@ -310,10 +333,16 @@ document.getElementById("close").onclick = () => {{ panel.hidden = true; writeHa
 document.addEventListener("click", ev => {{
   const b = ev.target.closest("button"); if (!b) return;
   if (b.dataset.open) openTask(b.dataset.open);
+  if (b.dataset.launch) {{
+    b.textContent = "Opening…";
+    fetch("/open?token=" + TOKEN + "&task=" + b.dataset.launch, {{ method: "POST" }}).then(r => r.json()).then(j => {{
+      b.textContent = j.ok ? "Opened" : "Failed"; b.title = j.error || "";
+      setTimeout(() => b.textContent = "Open in Herdr", 2500);
+    }}, () => {{ b.textContent = "Failed"; }});
+  }}
   if (b.dataset.copy) navigator.clipboard.writeText(b.dataset.copy).then(() => {{ b.textContent = "Copied"; setTimeout(() => b.textContent = "Copy command", 1500); }}, () => {{ b.textContent = "Copy failed"; }});
 }});
-// Regenerated by a hook whenever an agent edits a task; reload to pick it up, but not mid-typing.
-setInterval(() => {{ if (document.activeElement !== q) location.reload(); }}, {reload_ms});
+{refresh}
 </script></body></html>
 """
 
@@ -415,7 +444,8 @@ def cmd_check():
     return 1 if errors else 0
 
 
-def cmd_html(out):
+def build_page(token=None):
+    """(main checkout, page) from every worktree as they are on disk right now."""
     root = main_root()
     trees = worktrees()
     warnings = []
@@ -434,8 +464,12 @@ def cmd_html(out):
         warnings += [f"{label}: {err}" for err in errors]
         if tasks:
             infos[label] = activity(path, branch, label, path in busy, time.time())
-    launcher = "herdr" if HANDLER_APP.exists() else "claude"
-    page = render_html(merge(found), infos, repo_slug(), datetime.now().strftime("%d/%m/%Y %H:%M"), warnings, launcher)
+    stamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S" if token else "%d/%m/%Y %H:%M")
+    return root, render_html(merge(found), infos, repo_slug(), stamp, warnings, token)
+
+
+def cmd_html(out):
+    root, page = build_page()
     target = Path(out) if out else root / "tasks" / "index.html"
     target.parent.mkdir(parents=True, exist_ok=True)
     tmp = target.with_suffix(".tmp")
@@ -455,9 +489,9 @@ def herdr(*args):
     return json.loads(proc.stdout) if proc.stdout.strip() else {}
 
 
-def cmd_open_in_herdr(url):
-    task_id = task_from_url(url)
-    os.chdir(Path(__file__).resolve().parent)  # the URL handler starts in /
+def open_in_herdr(task_id):
+    if not ID_RE.match(task_id):
+        raise ValueError(f"not a task id: {task_id!r}")
     root = main_root()
     trees = worktrees()
     files = {t.file for path, _ in trees for t in read_tasks(path, path.name)[0] if t.id == task_id}
@@ -486,6 +520,50 @@ def cmd_open_in_herdr(url):
     pane = made["root_pane"]["pane_id"]
     herdr("agent", "start", name, "--kind", "claude", "--pane", pane)
     herdr("pane", "send-text", pane, f"/work-on-task {task_id}")
+
+
+def cmd_serve(port):
+    token = secrets.token_urlsafe(16)
+
+    class Handler(BaseHTTPRequestHandler):
+        def reply(self, code, body, kind):
+            data = body.encode()
+            self.send_response(code)
+            self.send_header("Content-Type", kind)
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data)
+
+        def do_GET(self):
+            if not authorized("GET", self.path, self.headers, token, port) or urlsplit(self.path).path != "/":
+                return self.reply(404, "not found", "text/plain")
+            try:
+                self.reply(200, build_page(token)[1], "text/html; charset=utf-8")
+            except (subprocess.CalledProcessError, OSError, ValueError) as err:
+                print(f"board: {err}", file=sys.stderr)
+                self.reply(500, f"board failed: {err}", "text/plain")
+
+        def do_POST(self):
+            if not authorized("POST", self.path, self.headers, token, port) or urlsplit(self.path).path != "/open":
+                return self.reply(404, "not found", "text/plain")
+            task_id = parse_qs(urlsplit(self.path).query).get("task", [""])[0]
+            try:
+                open_in_herdr(task_id)
+                self.reply(200, json.dumps({"ok": True}), "application/json")
+            except (ValueError, RuntimeError, subprocess.CalledProcessError) as err:
+                print(f"open {task_id}: {err}", file=sys.stderr)
+                self.reply(200, json.dumps({"ok": False, "error": str(err)}), "application/json")
+
+        def log_message(self, *args):
+            pass  # the page polls every few seconds; errors are printed where they happen
+
+    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    print(f"http://127.0.0.1:{port}/?token={token}  (Ctrl+C to stop)", flush=True)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
     return 0
 
 
@@ -495,11 +573,11 @@ def main():
     sub.add_parser("check")
     html_p = sub.add_parser("html")
     html_p.add_argument("--out")
-    open_p = sub.add_parser("open-in-herdr")
-    open_p.add_argument("url")
+    serve_p = sub.add_parser("serve")
+    serve_p.add_argument("--port", type=int, default=PORT)
     args = parser.parse_args()
-    if args.cmd == "open-in-herdr":
-        return cmd_open_in_herdr(args.url)
+    if args.cmd == "serve":
+        return cmd_serve(args.port)
     return cmd_check() if args.cmd == "check" else cmd_html(args.out)
 
 

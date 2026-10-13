@@ -8,14 +8,13 @@ from tasks import (  # noqa: E402
     Task,
     WorktreeInfo,
     agent_name,
+    authorized,
     deep_link,
-    herdr_link,
     is_active,
     merge,
     parse_task,
     pick_workspace,
     render_html,
-    task_from_url,
     task_worktree,
     validate,
 )
@@ -128,31 +127,6 @@ def test_deep_link_encodes_the_prompt_and_repo():
 # --- Herdr launcher -------------------------------------------------------
 
 
-def test_herdr_link_names_the_task():
-    assert herdr_link("T-0001") == "emailops-task://open?task=T-0001"
-
-
-def test_task_from_url_reads_the_id():
-    assert task_from_url("emailops-task://open?task=T-0042") == "T-0042"
-
-
-def test_task_from_url_rejects_anything_else():
-    # Any web page can fire this scheme; only a bare task id gets through.
-    for url in (
-        "emailops-task://open?task=T-42",
-        "emailops-task://open?task=T-0001;rm",
-        "emailops-task://open?task=T-0001&task=T-0002",
-        "emailops-task://run?task=T-0001",
-        "claude-cli://open?task=T-0001",
-        "emailops-task://open",
-    ):
-        try:
-            task_from_url(url)
-        except ValueError:
-            continue
-        raise AssertionError(f"accepted {url}")
-
-
 def test_agent_name_is_a_valid_herdr_name():
     assert agent_name("T-0007") == "t-0007"
 
@@ -201,11 +175,18 @@ def test_html_carries_the_deep_link_and_copy_command():
     assert 'claude &quot;/work-on-task T-0001&quot;' in html
 
 
-def test_html_opens_in_herdr_when_the_handler_is_installed():
-    html = render([task()], launcher="herdr")
-    assert 'href="emailops-task://open?task=T-0001"' in html
+def test_served_page_launches_through_the_server():
+    html = render([task()], token="tok123")
+    assert 'data-launch="T-0001"' in html
     assert "Open in Herdr" in html
     assert "claude-cli://" not in html
+    assert '"tok123"' in html
+
+
+def test_served_page_refreshes_in_place_instead_of_reloading():
+    html = render([task()], token="tok123")
+    assert "location.reload()" not in html
+    assert "DOMParser" in html
 
 
 def test_html_auto_refreshes_and_shows_generation_time():
@@ -243,6 +224,37 @@ def test_html_hides_worktree_activity_for_a_task_nobody_started():
     html = render([task(status="todo", worktree="wt-a")], wt)
     assert "feature/other-work" not in html
     assert "agent active" not in html
+
+
+# --- authorized -----------------------------------------------------------
+
+
+def req(method="GET", path="/?token=tok", host="127.0.0.1:8780", origin=None):
+    headers = {"Host": host}
+    if origin:
+        headers["Origin"] = origin
+    return authorized(method, path, headers, token="tok", port=8780)
+
+
+def test_get_with_the_token_on_localhost_is_allowed():
+    assert req()
+    assert req(host="localhost:8780")
+
+
+def test_missing_or_wrong_token_is_refused():
+    assert not req(path="/")
+    assert not req(path="/?token=nope")
+
+
+def test_foreign_host_header_is_refused():
+    # DNS rebinding: a page on evil.example resolving to 127.0.0.1 still sends its own Host.
+    assert not req(host="evil.example:8780")
+
+
+def test_post_needs_a_local_origin():
+    assert req("POST", "/open?token=tok&task=T-0001", origin="http://127.0.0.1:8780")
+    assert not req("POST", "/open?token=tok&task=T-0001")
+    assert not req("POST", "/open?token=tok&task=T-0001", origin="https://evil.example")
 
 
 # --- is_active ------------------------------------------------------------
