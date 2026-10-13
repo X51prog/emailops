@@ -12,9 +12,12 @@ from tasks import (  # noqa: E402
     deep_link,
     is_active,
     merge,
+    parse_milestones,
     parse_task,
+    prune_done,
     pick_workspace,
     render_html,
+    set_field,
     task_worktree,
     validate,
 )
@@ -56,6 +59,56 @@ def test_parse_non_numeric_pr_raises():
         assert "pr" in str(e)
     else:
         raise AssertionError("expected ValueError")
+
+
+def test_parse_reads_an_optional_issue():
+    assert parse_task(task_text() + "", "T-0001-a-task.md", "main").issue is None
+    text = task_text().replace("pr: null\n", "pr: null\nissue: 42\n")
+    assert parse_task(text, "T-0001-a-task.md", "main").issue == 42
+
+
+def test_parse_non_numeric_issue_raises():
+    text = task_text().replace("pr: null\n", "pr: null\nissue: soon\n")
+    try:
+        parse_task(text, "T-0001-a-task.md", "main")
+    except ValueError as e:
+        assert "issue" in str(e)
+    else:
+        raise AssertionError("expected ValueError")
+
+
+# --- milestones -------------------------------------------------------------
+
+
+def test_parse_milestones_reads_the_list_items():
+    assert parse_milestones("# Milestones\n\nIntro.\n\n- 0.7.0\n- later\n") == ["0.7.0", "later"]
+
+
+def test_a_milestone_missing_from_the_list_is_an_error():
+    assert any("milestone" in e for e in validate([task()], milestones=["later"]))
+    assert validate([task()], milestones=["0.7.0"]) == []
+
+
+# --- set_field / prune_done -------------------------------------------------
+
+
+def test_set_field_rewrites_one_frontmatter_line():
+    out = set_field(task_text(milestone="0.7.0", body="milestone: 0.7.0 in the body\n"), "milestone", "0.8.0")
+    assert "\nmilestone: 0.8.0\n" in out
+    assert out.endswith("milestone: 0.7.0 in the body\n")
+
+
+def test_set_field_on_a_missing_key_raises():
+    try:
+        set_field(task_text(), "owner", "x")
+    except ValueError:
+        return
+    raise AssertionError("expected ValueError")
+
+
+def test_prune_done_lists_only_done_task_files():
+    tasks = [task("T-0001", status="done", pr=3), task("T-0002", status="review", pr=4), task("T-0003")]
+    assert prune_done(tasks) == ["T-0001-a-task.md"]
 
 
 # --- validate -------------------------------------------------------------
@@ -212,6 +265,16 @@ def test_html_shows_worktree_branch_and_live_agent():
 
 def test_html_links_the_pr():
     assert "https://github.com/owner/repo/pull/42" in render([task(status="review", pr=42)])
+
+
+def test_html_links_the_issue():
+    t = task()
+    t.issue = 77
+    assert "https://github.com/owner/repo/issues/77" in render([t])
+
+
+def test_html_offers_milestones_that_have_no_task_yet():
+    assert '<option value="0.8.0">' in render([task()], milestones=["0.7.0", "0.8.0"])
 
 
 def test_html_reports_a_warning():

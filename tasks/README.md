@@ -16,6 +16,7 @@ title: Short imperative title
 status: todo
 milestone: 0.7.0
 pr: null
+issue: null
 ---
 
 ## Context
@@ -29,7 +30,10 @@ Why the task exists and what it touches.
 
 - `status`: `todo` → `doing` → `review` → `done`, or `dropped`.
 - `review` and `done` need `pr` (the PR number).
-- `milestone`: a version (`0.7.0`) or `later`.
+- `milestone`: one of the names listed in `tasks/milestones.md`.
+- `issue` (optional): the GitHub issue the task comes from; the board links it.
+- Done tasks are removed by the release (`tasks.py prune-done`, release
+  skill Phase 3c): git history keeps them.
 - New task: next free id, `status: todo`.
 - Work on a task in its own worktree and only edit that task's file there, so
   parallel branches never conflict. `/work-on-task T-NNNN` does this.

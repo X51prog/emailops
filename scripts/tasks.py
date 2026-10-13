@@ -8,7 +8,11 @@ different tasks in different worktrees never touch the same file.
 
 Usage:
   tasks.py check
-      Validate the task files of this checkout. Exit 1 on any error.
+      Validate the task files of this checkout (milestones must be listed in
+      tasks/milestones.md). Exit 1 on any error.
+  tasks.py prune-done
+      git rm the done tasks of this checkout; the release skill runs it so a
+      release commit drops the tasks it shipped.
   tasks.py html [--out PATH]
       Read tasks/ from every worktree of the repo (uncommitted edits included),
       keep the most advanced status of each task, add per-worktree activity
@@ -69,6 +73,7 @@ class Task:
     body: str
     file: str
     worktree: str
+    issue: int | None = None  # optional GitHub issue number
 
 
 @dataclass
@@ -99,13 +104,7 @@ def parse_task(text, file, worktree):
     missing = [f for f in FIELDS if f not in meta]
     if missing:
         raise ValueError(f"{file}: missing {', '.join(missing)}")
-    pr = meta["pr"]
-    if pr in ("", "null"):
-        pr = None
-    elif pr.isdigit():
-        pr = int(pr)
-    else:
-        raise ValueError(f"{file}: pr must be a number or null, got {pr!r}")
+    pr, issue = (number(meta.get(k, "null"), k, file) for k in ("pr", "issue"))
     return Task(
         id=meta["id"],
         title=meta["title"],
@@ -115,11 +114,39 @@ def parse_task(text, file, worktree):
         body=text[end + 5 :].lstrip("\n"),
         file=file,
         worktree=worktree,
+        issue=issue,
     )
 
 
-def validate(tasks):
-    """Errors for one checkout's tasks. Pure."""
+def number(value, key, file):
+    if value in ("", "null"):
+        return None
+    if value.isdigit():
+        return int(value)
+    raise ValueError(f"{file}: {key} must be a number or null, got {value!r}")
+
+
+def parse_milestones(text):
+    """Milestone names from tasks/milestones.md: one "- name" list item each. Pure."""
+    return [line[2:].strip() for line in text.splitlines() if line.startswith("- ") and line[2:].strip()]
+
+
+def set_field(text, key, value):
+    """The task file text with one frontmatter field replaced. Pure."""
+    end = text.find("\n---\n", 4)
+    head, n = re.subn(rf"^{re.escape(key)}:.*$", f"{key}: {value}", text[:end], count=1, flags=re.M)
+    if not n:
+        raise ValueError(f"no {key} field")
+    return head + text[end:]
+
+
+def prune_done(tasks):
+    """Files of the done tasks, which a release removes. Pure."""
+    return [t.file for t in tasks if t.status == "done"]
+
+
+def validate(tasks, milestones=None):
+    """Errors for one checkout's tasks; milestones, when given, is the allowed list. Pure."""
     errors = []
     seen = set()
     for t in tasks:
@@ -131,6 +158,8 @@ def validate(tasks):
             errors.append(f"{t.file}: status {t.status!r} is not one of {', '.join(STATUSES)}")
         if t.status in ("review", "done") and t.pr is None:
             errors.append(f"{t.file}: status {t.status} needs a pr number")
+        if milestones is not None and t.milestone not in milestones:
+            errors.append(f"{t.file}: milestone {t.milestone!r} is not in tasks/milestones.md")
         if t.id in seen:
             errors.append(f"{t.file}: duplicate id {t.id}")
         seen.add(t.id)
@@ -194,10 +223,10 @@ def authorized(method, path, headers, token, port):
     return method != "POST" or headers.get("Origin", "").removeprefix("http://") in local
 
 
-def render_html(tasks, worktrees, repo, generated, warnings=(), token=None):
+def render_html(tasks, worktrees, repo, generated, warnings=(), token=None, milestones=()):
     """The board as one self-contained page; with a token, the live page tasks.py serve returns. Pure."""
     e = html.escape
-    milestones = sorted({t.milestone for t in tasks})
+    milestones = list(milestones) + sorted({t.milestone for t in tasks} - set(milestones))
     columns = []
     for status in STATUSES:
         cards = []
@@ -206,6 +235,8 @@ def render_html(tasks, worktrees, repo, generated, warnings=(), token=None):
             meta = [f'<span class="pill">{e(t.milestone)}</span>']
             if t.pr is not None:
                 meta.append(f'<a class="pill" href="https://github.com/{e(repo)}/pull/{t.pr}" target="_blank" rel="noopener">#{t.pr}</a>')
+            if t.issue is not None:
+                meta.append(f'<a class="pill" href="https://github.com/{e(repo)}/issues/{t.issue}" target="_blank" rel="noopener">issue #{t.issue}</a>')
             activity = ""
             # Every worktree off main carries every todo task: only a started one is that worktree's work.
             if wt is not None and t.worktree != MAIN and t.status in ("doing", "review"):
@@ -435,9 +466,14 @@ def repo_slug():
     return m.group(1)
 
 
+def read_milestones(checkout):
+    path = checkout / "tasks" / "milestones.md"
+    return parse_milestones(path.read_text(encoding="utf-8")) if path.exists() else []
+
+
 def cmd_check():
     tasks, errors = read_tasks(Path.cwd(), MAIN)
-    errors += validate(tasks)
+    errors += validate(tasks, read_milestones(Path.cwd()))
     for err in errors:
         print(err, file=sys.stderr)
     print(f"{len(tasks)} tasks, {len(errors)} errors")
@@ -567,10 +603,24 @@ def cmd_serve(port):
     return 0
 
 
+def cmd_prune_done():
+    """git rm the done tasks of this checkout (the release skill runs it before its commit)."""
+    tasks, errors = read_tasks(Path.cwd(), MAIN)
+    if errors:
+        raise ValueError("; ".join(errors))
+    files = prune_done(tasks)
+    for f in files:
+        git("rm", "-q", f"tasks/{f}")
+        print(f"removed tasks/{f}")
+    print(f"{len(files)} done tasks pruned")
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("check")
+    sub.add_parser("prune-done")
     html_p = sub.add_parser("html")
     html_p.add_argument("--out")
     serve_p = sub.add_parser("serve")
@@ -578,6 +628,8 @@ def main():
     args = parser.parse_args()
     if args.cmd == "serve":
         return cmd_serve(args.port)
+    if args.cmd == "prune-done":
+        return cmd_prune_done()
     return cmd_check() if args.cmd == "check" else cmd_html(args.out)
 
 

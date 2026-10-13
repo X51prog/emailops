@@ -141,6 +141,18 @@ the new CHANGELOG section:
    until all four files exist for the `package.json` version, so Phase 4 catches
    a missing one. Stage the folder with the release commit (Phase 6).
 
+### Phase 3c — Prune shipped tasks
+
+Every task in `status: done` ships with this release, so drop its file:
+
+```bash
+python3 scripts/tasks.py prune-done   # git rm of each done task, then a count
+```
+
+It stages the deletions; they go in the release commit (Phase 6). Mention the
+pruned ids in the Done report. A task still at `review` stays: its PR is not
+merged, so it is not in the release.
+
 ## Phase 4 — Quality gates
 
 Run `make check` (lint + typecheck + Rust tests + frontend tests + clippy).
@@ -309,6 +321,7 @@ Once gates and build pass:
 ```bash
 git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock CHANGELOG.md src/releaseNotes/X.Y.Z \
   docs/verification/<stamp>-<sha>.md   # the summary written in Phase 1b
+# the task deletions from Phase 3c are already staged
 git commit -m "chore: release vX.Y.Z"
 git tag vX.Y.Z
 ```
