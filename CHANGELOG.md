@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   keeping values edited by hand.
 - Long values no longer take over the Lens table: they are cut to three lines,
   with **more** to show the rest.
+- Forwarding a conversation now carries every message of it, oldest first,
+  each under its own forwarded-message header, plus every message's
+  attachments. It used to carry only the latest message, so anything that
+  reply had not quoted, such as the opening message, was lost.
 
 ## [0.6.15] — 2026-10-08
 
