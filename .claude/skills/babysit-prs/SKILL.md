@@ -69,6 +69,12 @@ a `PushNotification` ("PR #<n> stuck: <one line>").
    `cd` into it, then `gh pr checkout <n>`. Confirm with
    `git rev-parse --show-toplevel`. Never point anything at the real data
    dir or `.emailops-demo-data/`; the gates need neither.
+   If the PR branch is already checked out in another worktree
+   (`git worktree list --porcelain`), `gh pr checkout` fails. Use that
+   worktree instead when it is clean (`git status --porcelain` empty), its
+   HEAD equals `headRefOid`, and no `claude` process has its cwd there
+   (`lsof -a -c claude -d cwd -Fn`); otherwise mark `needs-human`. Do not
+   remove that worktree in step 8.
 2. `conflict`: `git merge origin/main` (never rebase: the contributor's
    history stays intact). Resolve each conflict by reading both sides and the
    commits that introduced them (`git log -p origin/main -- <file>`), keeping
