@@ -3599,6 +3599,22 @@ not CMake's DLL link); exporting flags from `build_platform.sh` (release-only, a
 redefining `_FORTIFY_SOURCE` as 2 would downgrade compilers that default to 3); `-Zbuild-std` to
 put CFG in the Rust standard library (nightly only).
 
+## 2026-10-08 — The chat's priority filter excludes; intent and topic still rank
+
+**Decision:** In `search_emails`, `priority` is a hard filter: only mail at the asked level
+is returned, on the keyword and the semantic path, and a page that `intent`/`topic` widen
+with untagged matches keeps the priority on the added rows. `intent` and `topic` keep
+ranking instead of excluding.
+**Context:** "High-priority mail this week" found no urgent email in the window, so the
+tool showed the week's normal and low mail "instead", and a 4B model presented them as
+high priority despite the coverage note. Ranking exists for intent because an email stores
+one intent while often being several things at once; priority is one scale on which every
+classified email holds exactly one level, so `normal` is a definite "not urgent", not a
+near miss.
+**Rejected:** Dropping the widening for every tag — reverts the guard that keeps a wrong
+planner intent from swallowing a sender lookup. Rewording the coverage note only — leaves
+the answer to whether a small model obeys it.
+
 ## 2026-10-08 — Smart filters write their query into the search box
 
 **Decision:** Clicking a smart filter (company, priority, intent, topic, sender, domain,
@@ -3621,3 +3637,29 @@ classified tag (`latest_tag_only`).
 not carry the tag the user asked for. Sorting by the matching email — an old thread with
 fresh activity sinks to the bottom. Dating the matching row by the thread's last email
 while sorting by the match (option b) — the date and the position disagree.
+
+## 2026-10-08 — Typed search words still find junk; a smart filter's tokens do not
+
+**Decision:** Refines the smart-filter entry above. A search-box query made only of filter
+tokens (`tag:`, `from:`, `domain:`, `ext:` — what a smart filter writes) excludes junk, as
+the sidebar filter does. A query with typed words reaches junk too, which shows with its
+chip.
+**Context:** Hiding junk from the inbox is documented as "still reachable via search", and
+the e2e sweep checks that searching for a marked phishing email finds it with its chip.
+Excluding junk from every search-box query removed that way back to it.
+**Rejected:** Never showing junk in search (it would only be reachable from the Spam/Junk
+views, and the docs would have to drop the promise).
+
+## 2026-10-09 — i18n keys are extracted with i18next-cli, not i18next-parser
+
+**Decision:** `npm run i18n:extract` and `npm run i18n:check` run i18next-cli
+(`i18next.config.js`; the check calls its `runExtractor` against a temp copy of the
+catalogs). A plural variant counts as covered when the catalog has its bare key or any
+other plural form of it.
+**Context:** i18next-parser is deprecated in favour of i18next-cli, and its dependency
+chain (broccoli-plugin → quick-temp → underscore.string) pulled in sprintf-js 1.1.3,
+which has an advisory with no patched release. i18next-cli emits every CLDR plural form
+(`_many` for fr/es) where the catalogs hold `_one`/`_other`.
+**Rejected:** Dismissing the advisory as a dev-only risk (it would stay on a deprecated
+tool with no upgrade path). `disablePlurals` (catalogs that use `_one`/`_other` keys
+would then read as missing).

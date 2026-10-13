@@ -191,7 +191,8 @@ Antes de que escriba puedes decirle a la IA qué responder, y **Regenerar** lo v
 <!-- claim:ai-classification-1 -->
 Cada correo entrante se etiqueta en tres ejes — **prioridad**, **intención** y **tema** — de
 modo que la bandeja se ordena prácticamente sola y los filtros inteligentes tienen algo por lo
-que filtrar.
+que filtrar. El chat también las usa: si pides el correo urgente, lista solo el correo etiquetado
+como urgente, y te dice si no hay ninguno.
 
 <!-- claim:ai-classification-2 -->
 La clasificación funciona en dos capas:
@@ -299,6 +300,13 @@ de la barra lateral. Desactívalas en **Ajustes → Lentes de IA**.
 <!-- claim:ai-lenses-3 -->
 Una lente se puede limitar a unas **Carpetas** concretas de una cuenta, incluidas las carpetas
 IMAP personalizadas.
+
+<!-- claim:ai-lenses-4 -->
+En la configuración de una lente, **Probar** muestra cuántos correos coinciden con los filtros
+que estás editando y los tres más recientes, antes de guardar. Cambiar las columnas o el prompt
+marca las filas extraídas como desactualizadas, y el siguiente **Ejecutar reproceso** las vuelve a extraer
+conservando los valores que editaste a mano. Los valores largos se recortan a tres líneas en la
+tabla; **más** muestra el resto.
 
 ## Skills {#skills}
 

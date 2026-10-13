@@ -200,7 +200,8 @@ le réécrit.
 <!-- claim:ai-classification-1 -->
 Chaque e-mail entrant est étiqueté sur trois axes — **priorité**, **intention** et **sujet** —
 si bien que la boîte se trie pratiquement d'elle-même et que les filtres intelligents ont de
-quoi filtrer.
+quoi filtrer. Le chat les utilise aussi : si vous demandez les e-mails urgents, il ne liste que
+ceux étiquetés urgents, et vous le dit s'il n'y en a aucun.
 
 <!-- claim:ai-classification-2 -->
 La classification fonctionne en deux couches :
@@ -309,6 +310,13 @@ Les filtres dynamiques sont activés par défaut : créez et exécutez chaque vu
 <!-- claim:ai-lenses-3 -->
 Un filtre dynamique peut être limité à certains **Dossiers** d'un compte, dossiers IMAP personnalisés
 compris.
+
+<!-- claim:ai-lenses-4 -->
+Dans les réglages d'un filtre dynamique, **Tester** indique combien d'e-mails correspondent aux
+filtres en cours de modification et affiche les trois plus récents, avant d'enregistrer. Modifier
+les colonnes ou le prompt marque les lignes extraites comme périmées, et le prochain **Lancer le retraitement** les
+extrait à nouveau en conservant les valeurs modifiées à la main. Les valeurs longues sont coupées
+à trois lignes dans le tableau ; **plus** affiche la suite.
 
 ## Skills {#skills}
 

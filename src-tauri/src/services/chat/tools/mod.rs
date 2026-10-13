@@ -2471,6 +2471,86 @@ mod tests {
     }
 
     #[test]
+    fn a_priority_nobody_carries_lists_no_other_mail() {
+        // The reported failure: "high-priority mail this week" found no urgent
+        // email in the window, got the week's normal and low mail instead, and
+        // the model presented those as high priority. Every classified email
+        // has exactly one priority, so `normal` is an answer, not a near miss.
+        let db = tools_test_db();
+        let t = parse_iso_date_secs("2026-10-06").unwrap();
+        for (i, level) in ["normal", "low", "low"].iter().enumerate() {
+            seed_email(
+                &db,
+                &format!("w{i}"),
+                "acc",
+                &format!("t{i}"),
+                "Vendor",
+                "news@vendor.example",
+                &format!("Weekly note {i}"),
+                "body",
+                t + i as i64,
+            );
+            tag_email(&db, &format!("w{i}"), "priority", level);
+        }
+
+        let out = execute_tool(
+            &db,
+            "acc",
+            &[],
+            "search_emails",
+            &arg(serde_json::json!({ "priority": "urgent", "since": "2026-10-05", "until": "2026-10-11" })),
+        );
+
+        for id in ["w0", "w1", "w2"] {
+            assert!(!out.contains(&format!("id={id}")), "{id} is not urgent; out:\n{out}");
+        }
+        assert!(!out.contains("shown instead"), "out:\n{out}");
+    }
+
+    #[test]
+    fn priority_is_a_gate_while_intent_still_ranks() {
+        let db = tools_test_db();
+        let t = parse_iso_date_secs("2026-10-06").unwrap();
+        for (i, id) in ["promo", "q", "calm"].iter().enumerate() {
+            seed_email(
+                &db,
+                id,
+                "acc",
+                &format!("t{i}"),
+                "Shop",
+                "shop@vendor.example",
+                &format!("Offer {i}"),
+                "body",
+                t + i as i64,
+            );
+        }
+        tag_email(&db, "promo", "intent", "promotion");
+        tag_email(&db, "promo", "priority", "urgent");
+        tag_email(&db, "q", "intent", "question");
+        tag_email(&db, "q", "priority", "urgent");
+        tag_email(&db, "calm", "intent", "promotion");
+        tag_email(&db, "calm", "priority", "low");
+
+        let out = execute_tool(
+            &db,
+            "acc",
+            &[],
+            "search_emails",
+            &arg(serde_json::json!({ "from": "shop@vendor.example", "priority": "urgent", "intent": "promotion" })),
+        );
+
+        let promo = out.find("id=promo").expect("the urgent promotion is listed");
+        let q = out
+            .find("id=q")
+            .expect("an urgent email of another intent still follows");
+        assert!(promo < q, "out:\n{out}");
+        assert!(
+            !out.contains("id=calm"),
+            "a low-priority promotion is not urgent; out:\n{out}"
+        );
+    }
+
+    #[test]
     fn search_emails_says_nothing_about_coverage_when_everything_is_classified() {
         let db = tools_test_db();
         let t = parse_iso_date_secs("2026-04-17").unwrap();
@@ -3455,6 +3535,47 @@ mod tests {
         let b_pos = out.find("reply").expect("thread missing reply");
         assert!(a_pos < b_pos, "earlier email should appear first; got: {}", out);
         assert!(!out.contains("unrelated"), "other thread leaked: {}", out);
+    }
+
+    /// A model that only holds an email's id passes it as the thread id; the
+    /// email's own thread is what it meant, from the first message on.
+    #[test]
+    fn get_thread_given_an_email_id_reads_that_emails_thread() {
+        let db = tools_test_db();
+        seed_email(
+            &db,
+            "acc::1",
+            "acc",
+            "thread-1",
+            "A",
+            "a@x.com",
+            "first msg",
+            "body A",
+            100,
+        );
+        seed_email(&db, "acc::2", "acc", "thread-1", "B", "b@x.com", "reply", "body B", 200);
+        seed_email(
+            &db, "other::9", "other", "thread-9", "Z", "z@x.com", "foreign", "body Z", 50,
+        );
+
+        let out = execute_tool(
+            &db,
+            "acc",
+            &[],
+            "get_thread",
+            &arg(serde_json::json!({ "thread_id": "acc::2" })),
+        );
+        assert!(out.contains("first msg") && out.contains("reply"), "{out}");
+
+        // Another account's email is not a door into its thread.
+        let out = execute_tool(
+            &db,
+            "acc",
+            &[],
+            "get_thread",
+            &arg(serde_json::json!({ "thread_id": "other::9" })),
+        );
+        assert!(!out.contains("foreign"), "{out}");
     }
 
     /// Regression: `get_thread` used to clip each email at a hard 1500-char
