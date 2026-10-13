@@ -23,6 +23,9 @@ Usage:
       Claude in it and type /work-on-task T-NNNN without sending it.
 """
 
+# The URL handler runs macOS /usr/bin/python3 (3.9): keep annotations lazy.
+from __future__ import annotations
+
 import argparse
 import html
 import json
