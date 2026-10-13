@@ -49,10 +49,19 @@ Why the task exists and what it touches.
 - The board's **Open in Claude** button is a `claude-cli://` deep link that
   opens a terminal with `/work-on-task T-NNNN` typed in. **Copy command** puts
   the same command on the clipboard when the link handler is not registered.
-- `make tasks-serve`: the same board served live on `127.0.0.1:8780` (the
-  printed URL carries a random token; leave it running in a terminal or Herdr
-  pane). Every refresh re-reads the worktrees, so it needs no hook, and the page
-  updates in place every 5 seconds. **Open in Herdr** focuses the task's agent
-  if Herdr already runs one, otherwise it creates (or reuses) the task's
-  worktree `.claude/worktrees/T-NNNN-slug` on `feature/T-NNNN-slug`, opens a
-  Herdr tab there, starts Claude and types `/work-on-task T-NNNN` (not sent).
+- `make tasks-serve` (`scripts/task_board.py`): the same board served live on
+  `127.0.0.1:8780` (the printed URL carries a random token; leave it running in
+  a terminal or Herdr pane). Every refresh re-reads the tasks and the agents
+  Herdr runs here and on its saved machines, and the page updates in place
+  every 5 seconds. A card with an agent says where it runs; a yellow
+  **needs you** chip (agent blocked on a question, or done with its turn)
+  focuses that Herdr pane and raises the terminal. **Details** shows the
+  agent's latest output. **Open in Herdr** focuses the task's agent if there is
+  one, otherwise it creates (or reuses) the task's worktree
+  `.claude/worktrees/T-NNNN-slug` on `feature/T-NNNN-slug`, opens a Herdr tab
+  there, starts Claude and types `/work-on-task T-NNNN` (not sent).
+- What the board shows per task: the base branch's file, overridden by the
+  board branch `chore/tasks-board` (edits made from the board), by the task's
+  own worktree (uncommitted edits included) and by a pushed
+  `feature/T-NNNN-*` branch with no local worktree (another machine or a
+  cloud session); the most advanced status wins.

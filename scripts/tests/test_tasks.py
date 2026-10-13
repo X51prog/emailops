@@ -5,20 +5,20 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from tasks import (  # noqa: E402
+    AgentInfo,
     Task,
     WorktreeInfo,
-    agent_name,
-    authorized,
     deep_link,
     is_active,
+    agents_by_task,
     merge,
+    needs_you,
     parse_milestones,
     parse_task,
     prune_done,
-    pick_workspace,
     render_html,
     set_field,
-    task_worktree,
+    task_of_path,
     validate,
 )
 
@@ -165,6 +165,21 @@ def test_dropped_is_kept_when_nothing_else_moved():
     assert merge([task(status="dropped")])[0].status == "dropped"
 
 
+def test_on_a_tie_the_task_worktree_beats_the_board_and_the_board_beats_main():
+    merged = merge([task(worktree="main"), task(worktree="tasks-board"), task(worktree="T-0001-x")])
+    assert merged[0].worktree == "T-0001-x"
+    assert merge([task(worktree="main"), task(worktree="tasks-board")])[0].worktree == "tasks-board"
+
+
+def test_a_task_deleted_on_the_board_is_gone():
+    assert merge([task("T-0001"), task("T-0002")], deleted={"T-0001"}) == [task("T-0002")]
+
+
+def test_a_deleted_task_still_in_progress_in_its_worktree_stays():
+    merged = merge([task(worktree="main"), task(status="doing", worktree="T-0001-x")], deleted={"T-0001"})
+    assert [t.worktree for t in merged] == ["T-0001-x"]
+
+
 def test_a_task_only_in_one_worktree_is_kept():
     merged = merge([task("T-0001"), task("T-0002", worktree="wt-a")])
     assert [t.id for t in merged] == ["T-0001", "T-0002"]
@@ -175,37 +190,6 @@ def test_a_task_only_in_one_worktree_is_kept():
 
 def test_deep_link_encodes_the_prompt_and_repo():
     assert deep_link("T-0001", "owner/repo") == "claude-cli://open?q=%2Fwork-on-task%20T-0001&repo=owner%2Frepo"
-
-
-# --- Herdr launcher -------------------------------------------------------
-
-
-def test_agent_name_is_a_valid_herdr_name():
-    assert agent_name("T-0007") == "t-0007"
-
-
-def test_pick_workspace_prefers_the_focused_one_with_the_repo_label():
-    ws = [
-        {"workspace_id": "w1", "label": "emailopsv2", "focused": False},
-        {"workspace_id": "w2", "label": "other", "focused": True},
-        {"workspace_id": "w3", "label": "emailopsv2", "focused": True},
-    ]
-    assert pick_workspace(ws, "emailopsv2") == "w3"
-
-
-def test_pick_workspace_falls_back_to_the_first_match():
-    ws = [{"workspace_id": "w2", "label": "other", "focused": True}, {"workspace_id": "w4", "label": "emailopsv2", "focused": False}]
-    assert pick_workspace(ws, "emailopsv2") == "w4"
-
-
-def test_pick_workspace_without_a_match_is_none():
-    assert pick_workspace([{"workspace_id": "w2", "label": "other", "focused": True}], "emailopsv2") is None
-
-
-def test_task_worktree_is_named_after_the_task_file():
-    path, branch = task_worktree("T-0002-chat-app-control-tools.md", pathlib.Path("/repo"))
-    assert path == pathlib.Path("/repo/.claude/worktrees/T-0002-chat-app-control-tools")
-    assert branch == "feature/T-0002-chat-app-control-tools"
 
 
 # --- render_html ----------------------------------------------------------
@@ -226,20 +210,6 @@ def test_html_carries_the_deep_link_and_copy_command():
     html = render([task()])
     assert "claude-cli://open?q=%2Fwork-on-task%20T-0001&amp;repo=owner%2Frepo" in html
     assert 'claude &quot;/work-on-task T-0001&quot;' in html
-
-
-def test_served_page_launches_through_the_server():
-    html = render([task()], token="tok123")
-    assert 'data-launch="T-0001"' in html
-    assert "Open in Herdr" in html
-    assert "claude-cli://" not in html
-    assert '"tok123"' in html
-
-
-def test_served_page_refreshes_in_place_instead_of_reloading():
-    html = render([task()], token="tok123")
-    assert "location.reload()" not in html
-    assert "DOMParser" in html
 
 
 def test_html_auto_refreshes_and_shows_generation_time():
@@ -289,35 +259,60 @@ def test_html_hides_worktree_activity_for_a_task_nobody_started():
     assert "agent active" not in html
 
 
-# --- authorized -----------------------------------------------------------
+# --- live agents --------------------------------------------------------
 
 
-def req(method="GET", path="/?token=tok", host="127.0.0.1:8780", origin=None):
-    headers = {"Host": host}
-    if origin:
-        headers["Origin"] = origin
-    return authorized(method, path, headers, token="tok", port=8780)
+def test_task_of_path_reads_the_task_worktree():
+    assert task_of_path("/u/repo/.claude/worktrees/T-0003-anonymize-copy-thread") == "T-0003"
+    assert task_of_path("/u/repo/.claude/worktrees/T-0003-anonymize/src-tauri") == "T-0003"
+    assert task_of_path("/u/repo/.claude/worktrees/forward-whole-thread") is None
+    assert task_of_path("/u/repo") is None
 
 
-def test_get_with_the_token_on_localhost_is_allowed():
-    assert req()
-    assert req(host="localhost:8780")
+def agent(status="working", cwd="/u/repo/.claude/worktrees/T-0001-x", pane="w1:p1"):
+    return {"agent_status": status, "cwd": cwd, "foreground_cwd": cwd, "pane_id": pane}
 
 
-def test_missing_or_wrong_token_is_refused():
-    assert not req(path="/")
-    assert not req(path="/?token=nope")
+def test_agents_by_task_maps_each_agent_to_its_task_and_machine():
+    found = agents_by_task([("Laptop", None, agent()), ("remote-box", "m1", agent("idle", "/r/.claude/worktrees/T-0002-y", "w2:p3"))])
+    assert found == {
+        "T-0001": AgentInfo(machine="Laptop", machine_id=None, status="working", pane_id="w1:p1"),
+        "T-0002": AgentInfo(machine="remote-box", machine_id="m1", status="idle", pane_id="w2:p3"),
+    }
 
 
-def test_foreign_host_header_is_refused():
-    # DNS rebinding: a page on evil.example resolving to 127.0.0.1 still sends its own Host.
-    assert not req(host="evil.example:8780")
+def test_agents_outside_a_task_worktree_are_ignored():
+    assert agents_by_task([("Laptop", None, agent(cwd="/u/repo"))]) == {}
 
 
-def test_post_needs_a_local_origin():
-    assert req("POST", "/open?token=tok&task=T-0001", origin="http://127.0.0.1:8780")
-    assert not req("POST", "/open?token=tok&task=T-0001")
-    assert not req("POST", "/open?token=tok&task=T-0001", origin="https://evil.example")
+def test_when_two_agents_share_a_task_the_one_needing_you_wins():
+    found = agents_by_task([("Laptop", None, agent("working", pane="w1:p1")), ("Laptop", None, agent("blocked", pane="w1:p2"))])
+    assert found["T-0001"].pane_id == "w1:p2"
+
+
+def test_blocked_and_done_need_you():
+    assert [s for s in ("idle", "working", "blocked", "done", "unknown") if needs_you(s)] == ["blocked", "done"]
+
+
+def test_card_shows_where_the_agent_runs_and_a_needs_you_chip():
+    a = AgentInfo(machine="remote-box", machine_id="m1", status="blocked", pane_id="w2:p3")
+    html = render([task(status="doing", worktree="T-0001-x")], agents={"T-0001": a}, token="tok")
+    assert "on remote-box" in html
+    assert 'data-focus="T-0001"' in html
+    assert 'data-agent="1"' in html
+
+
+def test_card_without_a_waiting_agent_has_no_needs_you_chip():
+    a = AgentInfo(machine="Laptop", machine_id=None, status="working", pane_id="w1:p1")
+    html = render([task(status="doing", worktree="T-0001-x")], agents={"T-0001": a}, token="tok")
+    assert "data-focus" not in html
+    assert "agent active" in html
+
+
+def test_card_from_a_remote_branch_says_so():
+    wt = {"origin/feature/T-0001-x": WorktreeInfo(name="origin/feature/T-0001-x", branch="feature/T-0001-x", last_commit="1h ago · x", dirty=0, ahead=2, idle_min=60, agent=False, remote=True)}
+    html = render([task(status="doing", worktree="origin/feature/T-0001-x")], wt)
+    assert "remote branch" in html
 
 
 # --- is_active ------------------------------------------------------------

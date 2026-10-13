@@ -454,7 +454,7 @@ tasks-html:
 
 # Serve the board live on 127.0.0.1 (prints the URL with its token); its Open button starts the task in Herdr
 tasks-serve:
-	python3 scripts/tasks.py serve
+	python3 scripts/task_board.py
 
 # Install git hooks
 hooks:

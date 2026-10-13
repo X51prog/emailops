@@ -14,51 +14,49 @@ Usage:
       git rm the done tasks of this checkout; the release skill runs it so a
       release commit drops the tasks it shipped.
   tasks.py html [--out PATH]
-      Read tasks/ from every worktree of the repo (uncommitted edits included),
-      keep the most advanced status of each task, add per-worktree activity
-      (branch, last commit, dirty files, commits ahead of origin/main, minutes since
-      the last change, and whether an agent is on it: a claude process inside it or a
-      change in the last 10 minutes) and write one self-contained page. Default output:
+      Build the board and write one self-contained page. Default output:
       <main checkout>/tasks/index.html (gitignored). Read-only otherwise.
-  tasks.py serve [--port N]
-      Serve the same board live on 127.0.0.1 (a random token in the URL guards it):
-      every request re-reads the worktrees and the page refreshes in place. Its
-      "Open in Herdr" button focuses the task's agent if Herdr already runs one,
-      otherwise creates (or reuses) the task's worktree, opens a Herdr tab there,
-      starts Claude and types /work-on-task T-NNNN without sending it. Starting in
-      the worktree, not the main checkout, means the session sees the repo's skills
-      whatever branch the main checkout is on.
+      The board layers, per task, the most advanced status from: the base branch
+      (TASK_BASE), the board's own branch (chore/tasks-board: milestone edits and
+      deletions made from the live board), the task's own worktree (feature/T-NNNN-*,
+      uncommitted edits included) and a pushed feature/T-NNNN-* branch with no local
+      worktree (another machine or a cloud session). Other worktrees are ignored:
+      each carries a stale copy of every task. Task worktrees add their activity
+      (branch, last commit, dirty files, commits ahead of origin/main, minutes since
+      the last change, and whether an agent is on it).
+
+  The live board (scripts/task_board.py, make tasks-serve) renders the same page.
 """
 
 # The URL handler runs macOS /usr/bin/python3 (3.9): keep annotations lazy.
 from __future__ import annotations
 
 import argparse
-import hmac
 import html
 import json
 import os
 import re
-import secrets
-import shutil
 import subprocess
 import sys
 import time
 from dataclasses import dataclass
 from datetime import datetime
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, quote, urlsplit
+from urllib.parse import quote
 
 STATUSES = ("todo", "doing", "review", "done", "dropped")
 # Merge order across worktrees: a later status means more progress.
 RANK = {"todo": 0, "doing": 1, "review": 2, "dropped": 3, "done": 4}
 FIELDS = ("id", "title", "status", "milestone", "pr")
 ID_RE = re.compile(r"^T-\d{4}$")
-MAIN = "main"  # label of the main checkout
+MAIN = "main"  # label of the base branch's tasks
+BOARD = "tasks-board"  # label and worktree dir of the branch the live board writes to
+BOARD_BRANCH = "chore/tasks-board"
+TASK_BRANCH_RE = re.compile(r"^(?:feature|fix|refactor)/(T-\d{4})-")
+TASK_PATH_RE = re.compile(r"/\.claude/worktrees/(T-\d{4})-[^/]*(?:/|$)")
+NEEDS_YOU = ("blocked", "done")  # Herdr states where the agent waits for the user
 RELOAD_SECONDS = 20
 ACTIVE_MINUTES = 10  # a worktree changed this recently counts as having an agent on it
-PORT = 8780
 POLL_SECONDS = 5  # the served page re-reads the board this often
 TASK_BASE = "chore/sdlc-automation"  # TODO: origin/main once this branch is merged (work-on-task lives there)
 
@@ -85,6 +83,15 @@ class WorktreeInfo:
     ahead: int
     idle_min: int  # minutes since the last change (dirty file or commit)
     agent: bool
+    remote: bool = False  # a pushed branch with no local worktree
+
+
+@dataclass
+class AgentInfo:
+    machine: str  # where the agent runs: this computer's name or a Herdr machine label
+    machine_id: str | None  # Herdr machine id, None for this computer
+    status: str  # Herdr: idle | working | blocked | done | unknown
+    pane_id: str
 
 
 def parse_task(text, file, worktree):
@@ -166,12 +173,23 @@ def validate(tasks, milestones=None):
     return errors
 
 
-def merge(tasks):
-    """One task per id: the most advanced status wins; on a tie, a worktree beats main. Pure."""
+def merge(tasks, deleted=()):
+    """One task per id. Pure.
+
+    The most advanced status wins; on a tie the task's own worktree beats the
+    board branch, which beats the base. A task deleted on the board is dropped
+    unless its own worktree (or branch) still carries it.
+    """
+
+    def key(t):
+        return RANK.get(t.status, -1), {MAIN: 0, BOARD: 1}.get(t.worktree, 2)
+
     best = {}
     for t in tasks:
+        if t.id in deleted and t.worktree in (MAIN, BOARD):
+            continue
         cur = best.get(t.id)
-        if cur is None or (RANK.get(t.status, -1), t.worktree != MAIN) > (RANK.get(cur.status, -1), cur.worktree != MAIN):
+        if cur is None or key(t) > key(cur):
             best[t.id] = t
     return [best[k] for k in sorted(best)]
 
@@ -191,42 +209,40 @@ def deep_link(task_id, repo):
     return f"claude-cli://open?q={quote('/work-on-task ' + task_id, safe='')}&repo={quote(repo, safe='')}"
 
 
-def task_worktree(file_name, root):
-    """(path, branch) of a task's worktree, named after its file: T-0002-slug.md. Pure."""
-    stem = Path(file_name).stem
-    return root / ".claude" / "worktrees" / stem, f"feature/{stem}"
+def task_of_path(path):
+    """The task id of a path inside a task worktree (.claude/worktrees/T-NNNN-slug), else None. Pure."""
+    m = TASK_PATH_RE.search(path)
+    return m.group(1) if m else None
 
 
-def agent_name(task_id):
-    """Herdr agent name for a task (names are lowercase)."""
-    return task_id.lower()
+def needs_you(status):
+    return status in NEEDS_YOU
 
 
-def pick_workspace(workspaces, label):
-    """Id of the Herdr workspace labelled after the repo, the focused one first. Pure."""
-    hits = [w for w in workspaces if w["label"] == label]
-    hits.sort(key=lambda w: not w["focused"])
-    return hits[0]["workspace_id"] if hits else None
+def agents_by_task(entries):
+    """Task id -> AgentInfo from (machine label, machine id, Herdr agent) entries. Pure.
 
-
-def authorized(method, path, headers, token, port):
-    """Whether a request may reach the served board. Pure.
-
-    Any page open in the browser can send requests to 127.0.0.1, and the board can
-    start agents: require the URL token, a local Host (a rebound DNS name keeps its
-    own), and on POST a local Origin.
+    An agent belongs to the task whose worktree is its working directory; when
+    two share a task, the one waiting for the user wins, then a working one.
     """
-    local = {f"127.0.0.1:{port}", f"localhost:{port}"}
-    given = parse_qs(urlsplit(path).query).get("token", [""])[0]
-    if headers.get("Host") not in local or not hmac.compare_digest(given, token):
-        return False
-    return method != "POST" or headers.get("Origin", "").removeprefix("http://") in local
+    order = {"blocked": 4, "done": 3, "working": 2, "idle": 1}
+    found = {}
+    for machine, machine_id, a in entries:
+        task_id = task_of_path(a.get("foreground_cwd") or a.get("cwd") or "")
+        if task_id is None:
+            continue
+        info = AgentInfo(machine=machine, machine_id=machine_id, status=a.get("agent_status", "unknown"), pane_id=a["pane_id"])
+        cur = found.get(task_id)
+        if cur is None or order.get(info.status, 0) > order.get(cur.status, 0):
+            found[task_id] = info
+    return found
 
 
-def render_html(tasks, worktrees, repo, generated, warnings=(), token=None, milestones=()):
+def render_html(tasks, worktrees, repo, generated, warnings=(), token=None, milestones=(), agents=None):
     """The board as one self-contained page; with a token, the live page tasks.py serve returns. Pure."""
     e = html.escape
     milestones = list(milestones) + sorted({t.milestone for t in tasks} - set(milestones))
+    agents = agents or {}
     columns = []
     for status in STATUSES:
         cards = []
@@ -237,25 +253,38 @@ def render_html(tasks, worktrees, repo, generated, warnings=(), token=None, mile
                 meta.append(f'<a class="pill" href="https://github.com/{e(repo)}/pull/{t.pr}" target="_blank" rel="noopener">#{t.pr}</a>')
             if t.issue is not None:
                 meta.append(f'<a class="pill" href="https://github.com/{e(repo)}/issues/{t.issue}" target="_blank" rel="noopener">issue #{t.issue}</a>')
+            ag = agents.get(t.id)
+            live = ""
+            if ag is not None:
+                state = '<span class="agent">● agent active</span>' if ag.status == "working" else f'<span class="state">{e(ag.status)}</span>'
+                chips = [f'<span class="pill">on {e(ag.machine)}</span>', state]
+                if needs_you(ag.status):
+                    chips.append(f'<button class="chip needs" data-focus="{e(t.id)}">needs you</button>' if token else '<span class="chip needs">needs you</span>')
+                live = f'<div class="live">{"".join(chips)}</div>'
             activity = ""
-            # Every worktree off main carries every todo task: only a started one is that worktree's work.
-            if wt is not None and t.worktree != MAIN and t.status in ("doing", "review"):
-                agent = '<span class="agent">● agent active</span>' if wt.agent else ""
-                activity = (
-                    f'<div class="wt">{agent}<code>{e(wt.branch)}</code>'
-                    f"<span>{e(wt.last_commit)}</span>"
-                    f"<span>{wt.dirty} changed · {wt.ahead} ahead of origin/main · last change {wt.idle_min} min ago</span></div>"
-                )
+            if wt is not None and t.worktree not in (MAIN, BOARD) and t.status in ("doing", "review"):
+                if wt.remote:
+                    activity = (
+                        f'<div class="wt"><span class="pill">remote branch (another machine or the cloud)</span><code>{e(wt.branch)}</code>'
+                        f"<span>{e(wt.last_commit)}</span><span>{wt.ahead} ahead of origin/main</span></div>"
+                    )
+                else:
+                    agent = '<span class="agent">● agent active</span>' if wt.agent and ag is None else ""
+                    activity = (
+                        f'<div class="wt">{agent}<code>{e(wt.branch)}</code>'
+                        f"<span>{e(wt.last_commit)}</span>"
+                        f"<span>{wt.dirty} changed · {wt.ahead} ahead of origin/main · last change {wt.idle_min} min ago</span></div>"
+                    )
             command = f'claude "/work-on-task {t.id}"'
             if token:
                 launch = f'<button class="btn primary" data-launch="{e(t.id)}">Open in Herdr</button>'
             else:
                 launch = f'<a class="btn primary" href="{e(deep_link(t.id, repo))}">Open in Claude</a>'
             cards.append(
-                f'<article class="card" id="{e(t.id)}" data-milestone="{e(t.milestone)}" '
+                f'<article class="card" id="{e(t.id)}" data-milestone="{e(t.milestone)}"{' data-agent="1"' if ag else ""} '
                 f'data-text="{e((t.id + " " + t.title + " " + t.body).lower())}">'
                 f'<header><span class="tid">{e(t.id)}</span>{"".join(meta)}</header>'
-                f'<h3>{e(t.title)}</h3>{activity}'
+                f'<h3>{e(t.title)}</h3>{live}{activity}'
                 f'<div class="actions">{launch}'
                 f'<button class="btn" data-copy="{e(command)}">Copy command</button>'
                 f'<button class="btn" data-open="{e(t.id)}">Details</button></div>'
@@ -320,6 +349,9 @@ input, select {{ font:inherit; padding:5px 8px; border:1px solid var(--line); bo
 .wt {{ display:flex; flex-direction:column; gap:2px; font-size:12px; color:var(--muted); margin-bottom:6px; }}
 .wt code {{ color:var(--text); }}
 .agent {{ color:var(--ok); font-weight:600; }}
+.live {{ display:flex; gap:6px; align-items:center; flex-wrap:wrap; font-size:12px; margin-bottom:6px; }}
+.state {{ color:var(--muted); }}
+.chip.needs {{ font:600 11px inherit; padding:1px 8px; border-radius:999px; border:1px solid #d4a800; background:#f5c518; color:#1c2024; cursor:pointer; }}
 .actions {{ display:flex; gap:6px; flex-wrap:wrap; }}
 .btn {{ font:12px inherit; padding:4px 8px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--text); cursor:pointer; text-decoration:none; }}
 .btn.primary {{ background:var(--accent); border-color:var(--accent); color:#fff; }}
@@ -335,7 +367,8 @@ input, select {{ font:inherit; padding:5px 8px; border:1px solid var(--line); bo
 <span class="gen">Generated {generated}</span></div>
 <div id="notes">{notes}</div>
 <main class="board">{columns}</main>
-<aside id="panel" hidden><button class="btn" id="close">Close</button><h2 id="ptitle"></h2><pre id="pbody"></pre></aside>
+<aside id="panel" hidden><button class="btn" id="close">Close</button><h2 id="ptitle"></h2><pre id="pbody"></pre>
+<h3 id="pouth" hidden>Agent output</h3><pre id="pout" hidden></pre></aside>
 <script>
 const TOKEN = {token};
 const ms = document.getElementById("ms"), q = document.getElementById("q"), panel = document.getElementById("panel");
@@ -357,6 +390,17 @@ function openTask(id) {{
   document.getElementById("ptitle").textContent = id + " · " + card.querySelector("h3").textContent;
   document.getElementById("pbody").textContent = card.querySelector(".body").textContent;
   panel.hidden = false; writeHash(id);
+  const pout = document.getElementById("pout"), live = Boolean(TOKEN && card.dataset.agent);
+  pout.hidden = document.getElementById("pouth").hidden = !live;
+  if (live) fetch("/output?token=" + TOKEN + "&task=" + id, {{ cache: "no-store" }}).then(r => r.text()).then(t => {{ pout.textContent = t; }}, () => {{ pout.textContent = "Agent output unavailable"; }});
+}}
+function post(path, b, label) {{
+  b.textContent = "…";
+  return fetch(path + (path.includes("?") ? "&" : "?") + "token=" + TOKEN, {{ method: "POST" }}).then(r => r.json()).then(j => {{
+    b.textContent = j.ok ? "✓" : "Failed"; b.title = j.error || "";
+    setTimeout(() => b.textContent = label, 2500);
+    return j;
+  }}, () => {{ b.textContent = "Failed"; }});
 }}
 const s = readHash(); ms.value = s.ms; q.value = s.q; apply(); if (s.open) openTask(s.open);
 ms.onchange = q.oninput = () => {{ apply(); writeHash(panel.hidden ? "" : readHash().open); }};
@@ -364,13 +408,8 @@ document.getElementById("close").onclick = () => {{ panel.hidden = true; writeHa
 document.addEventListener("click", ev => {{
   const b = ev.target.closest("button"); if (!b) return;
   if (b.dataset.open) openTask(b.dataset.open);
-  if (b.dataset.launch) {{
-    b.textContent = "Opening…";
-    fetch("/open?token=" + TOKEN + "&task=" + b.dataset.launch, {{ method: "POST" }}).then(r => r.json()).then(j => {{
-      b.textContent = j.ok ? "Opened" : "Failed"; b.title = j.error || "";
-      setTimeout(() => b.textContent = "Open in Herdr", 2500);
-    }}, () => {{ b.textContent = "Failed"; }});
-  }}
+  if (b.dataset.launch) post("/open?task=" + b.dataset.launch, b, "Open in Herdr");
+  if (b.dataset.focus) post("/focus?task=" + b.dataset.focus, b, "needs you");
   if (b.dataset.copy) navigator.clipboard.writeText(b.dataset.copy).then(() => {{ b.textContent = "Copied"; setTimeout(() => b.textContent = "Copy command", 1500); }}, () => {{ b.textContent = "Copy failed"; }});
 }});
 {refresh}
@@ -389,14 +428,27 @@ def main_root():
     return Path(git("rev-parse", "--path-format=absolute", "--git-common-dir").strip()).parent
 
 
-def read_tasks(checkout, label):
-    """Tasks of one checkout plus parse errors (as strings)."""
+def read_tasks(checkout, label, pattern="T-*.md"):
+    """Tasks of one checkout (from disk) plus parse errors (as strings)."""
     tasks, errors = [], []
-    for path in sorted((checkout / "tasks").glob("T-*.md")):
+    for path in sorted((checkout / "tasks").glob(pattern)):
         try:
             tasks.append(parse_task(path.read_text(encoding="utf-8"), path.name, label))
         except ValueError as err:
             errors.append(str(err))
+    return tasks, errors
+
+
+def read_ref_tasks(ref, label, prefix="T-"):
+    """Tasks committed on a git ref plus parse errors."""
+    tasks, errors = [], []
+    for name in git("ls-tree", "--name-only", ref, "tasks/").split():
+        file = name.removeprefix("tasks/")
+        if file.startswith(prefix) and file.endswith(".md"):
+            try:
+                tasks.append(parse_task(git("show", f"{ref}:{name}"), file, label))
+            except ValueError as err:
+                errors.append(str(err))
     return tasks, errors
 
 
@@ -458,6 +510,70 @@ def activity(path, branch, label, has_process, now):
     )
 
 
+def remote_activity(ref, now):
+    """WorktreeInfo for a pushed task branch nobody has checked out here."""
+    commit_time, summary = git("log", "-1", "--format=%ct%n%cr · %s", ref).split("\n", 1)
+    return WorktreeInfo(
+        name=ref,
+        branch=ref.removeprefix("origin/"),
+        last_commit=summary.strip(),
+        dirty=0,
+        ahead=int(git("rev-list", "--count", f"origin/main..{ref}").strip()),
+        idle_min=int((now - int(commit_time)) // 60),
+        agent=False,
+        remote=True,
+    )
+
+
+def collect():
+    """(main checkout, merged tasks, worktree infos, milestones, warnings) as they are right now."""
+    root = main_root()
+    now = time.time()
+    tasks, warnings = [], []
+
+    def add(found, label):
+        tasks.extend(found[0])
+        warnings.extend(f"{label}: {err}" for err in found[1])
+
+    add(read_ref_tasks(TASK_BASE, MAIN), TASK_BASE)
+    milestones = parse_milestones(git("show", f"{TASK_BASE}:tasks/milestones.md"))
+    deleted = set()
+    board = root / ".claude" / "worktrees" / BOARD
+    if board.exists():
+        base = git("merge-base", "HEAD", TASK_BASE, cwd=board).strip()
+        for line in git("diff", "--name-status", base, "--", "tasks/", cwd=board).splitlines():
+            change, name = line.split("\t")[0], line.split("\t")[-1]
+            file = name.removeprefix("tasks/")
+            if change == "D" and file.startswith("T-"):
+                deleted.add(file[:6])
+            elif file.startswith("T-"):
+                add(read_tasks(board, BOARD, file), BOARD)
+        milestones = read_milestones(board)
+
+    trees = worktrees()
+    try:
+        cwds = claude_cwds()
+    except OSError as err:
+        warnings.append(f"lsof unavailable, live agents not shown: {err}")
+        cwds = []
+    busy = {owner_of(c, [p for p, _ in trees]) for c in cwds}
+    infos = {}
+    for path, branch in trees:
+        m = TASK_BRANCH_RE.match(branch)
+        if m:
+            add(read_tasks(path, path.name, f"{m.group(1)}-*.md"), path.name)
+            infos[path.name] = activity(path, branch, path.name, path in busy, now)
+    local = {b for _, b in trees}
+    refs = git("for-each-ref", "--format=%(refname:short)", *(f"refs/remotes/origin/{k}/T-*" for k in ("feature", "fix", "refactor")))
+    for ref in refs.split():
+        branch = ref.removeprefix("origin/")
+        m = TASK_BRANCH_RE.match(branch)
+        if m and branch not in local:
+            add(read_ref_tasks(ref, ref, m.group(1)), ref)
+            infos[ref] = remote_activity(ref, now)
+    return root, merge(tasks, deleted), infos, milestones, warnings
+
+
 def repo_slug():
     url = git("remote", "get-url", "origin").strip()
     m = re.search(r"[:/]([^/:]+/[^/]+?)(?:\.git)?$", url)
@@ -480,28 +596,12 @@ def cmd_check():
     return 1 if errors else 0
 
 
-def build_page(token=None):
-    """(main checkout, page) from every worktree as they are on disk right now."""
-    root = main_root()
-    trees = worktrees()
-    warnings = []
-    try:
-        cwds = claude_cwds()
-    except OSError as err:
-        warnings.append(f"lsof unavailable, live agents not shown: {err}")
-        cwds = []
-    paths = [p for p, _ in trees]
-    busy = {owner_of(c, paths) for c in cwds}
-    found, infos = [], {}
-    for path, branch in trees:
-        label = MAIN if path == root else path.name
-        tasks, errors = read_tasks(path, label)
-        found += tasks
-        warnings += [f"{label}: {err}" for err in errors]
-        if tasks:
-            infos[label] = activity(path, branch, label, path in busy, time.time())
+def build_page(token=None, agents=None, warnings=()):
+    """(main checkout, page) built from collect()."""
+    root, tasks, infos, milestones, found_warnings = collect()
     stamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S" if token else "%d/%m/%Y %H:%M")
-    return root, render_html(merge(found), infos, repo_slug(), stamp, warnings, token)
+    page = render_html(tasks, infos, repo_slug(), stamp, [*warnings, *found_warnings], token, milestones, agents)
+    return root, page
 
 
 def cmd_html(out):
@@ -512,94 +612,6 @@ def cmd_html(out):
     tmp.write_text(page, encoding="utf-8")
     os.replace(tmp, target)  # never leave a half-written page for the auto-reload to pick up
     print(target.as_uri())
-    return 0
-
-
-def herdr(*args):
-    """Run a Herdr CLI command and return its JSON reply."""
-    # The URL handler runs with launchd's PATH, which lacks the default install dir.
-    exe = shutil.which("herdr") or str(Path.home() / ".local" / "bin" / "herdr")
-    proc = subprocess.run([exe, *map(str, args)], capture_output=True, text=True)
-    if proc.returncode != 0:
-        raise RuntimeError(f"herdr {' '.join(map(str, args))}: {proc.stderr.strip() or proc.returncode}")
-    return json.loads(proc.stdout) if proc.stdout.strip() else {}
-
-
-def open_in_herdr(task_id):
-    if not ID_RE.match(task_id):
-        raise ValueError(f"not a task id: {task_id!r}")
-    root = main_root()
-    trees = worktrees()
-    files = {t.file for path, _ in trees for t in read_tasks(path, path.name)[0] if t.id == task_id}
-    if len(files) != 1:
-        raise ValueError(f"task {task_id}: expected one file across worktrees, found {sorted(files) or 'none'}")
-    name = agent_name(task_id)
-    try:
-        herdr("agent", "focus", name)
-        return 0  # that task already has a live agent
-    except RuntimeError:
-        pass
-    path, branch = task_worktree(files.pop(), root)
-    cwd = next((p for p, b in trees if b == branch), None)
-    if cwd is None:
-        if subprocess.run(["git", "rev-parse", "--verify", "-q", f"refs/heads/{branch}"], capture_output=True).returncode == 0:
-            git("worktree", "add", str(path), branch)  # the branch outlived its worktree
-        else:
-            git("worktree", "add", "-b", branch, str(path), TASK_BASE)
-        cwd = path
-    ws = pick_workspace(herdr("workspace", "list")["result"]["workspaces"], root.name)
-    if ws is None:
-        made = herdr("workspace", "create", "--cwd", cwd, "--label", root.name, "--focus")["result"]
-    else:
-        made = herdr("tab", "create", "--workspace", ws, "--cwd", cwd, "--label", task_id, "--focus")["result"]
-        herdr("workspace", "focus", ws)
-    pane = made["root_pane"]["pane_id"]
-    herdr("agent", "start", name, "--kind", "claude", "--pane", pane)
-    herdr("pane", "send-text", pane, f"/work-on-task {task_id}")
-
-
-def cmd_serve(port):
-    token = secrets.token_urlsafe(16)
-
-    class Handler(BaseHTTPRequestHandler):
-        def reply(self, code, body, kind):
-            data = body.encode()
-            self.send_response(code)
-            self.send_header("Content-Type", kind)
-            self.send_header("Content-Length", str(len(data)))
-            self.send_header("Cache-Control", "no-store")
-            self.end_headers()
-            self.wfile.write(data)
-
-        def do_GET(self):
-            if not authorized("GET", self.path, self.headers, token, port) or urlsplit(self.path).path != "/":
-                return self.reply(404, "not found", "text/plain")
-            try:
-                self.reply(200, build_page(token)[1], "text/html; charset=utf-8")
-            except (subprocess.CalledProcessError, OSError, ValueError) as err:
-                print(f"board: {err}", file=sys.stderr)
-                self.reply(500, f"board failed: {err}", "text/plain")
-
-        def do_POST(self):
-            if not authorized("POST", self.path, self.headers, token, port) or urlsplit(self.path).path != "/open":
-                return self.reply(404, "not found", "text/plain")
-            task_id = parse_qs(urlsplit(self.path).query).get("task", [""])[0]
-            try:
-                open_in_herdr(task_id)
-                self.reply(200, json.dumps({"ok": True}), "application/json")
-            except (ValueError, RuntimeError, subprocess.CalledProcessError) as err:
-                print(f"open {task_id}: {err}", file=sys.stderr)
-                self.reply(200, json.dumps({"ok": False, "error": str(err)}), "application/json")
-
-        def log_message(self, *args):
-            pass  # the page polls every few seconds; errors are printed where they happen
-
-    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    print(f"http://127.0.0.1:{port}/?token={token}  (Ctrl+C to stop)", flush=True)
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        pass
     return 0
 
 
@@ -623,11 +635,7 @@ def main():
     sub.add_parser("prune-done")
     html_p = sub.add_parser("html")
     html_p.add_argument("--out")
-    serve_p = sub.add_parser("serve")
-    serve_p.add_argument("--port", type=int, default=PORT)
     args = parser.parse_args()
-    if args.cmd == "serve":
-        return cmd_serve(args.port)
     if args.cmd == "prune-done":
         return cmd_prune_done()
     return cmd_check() if args.cmd == "check" else cmd_html(args.out)
