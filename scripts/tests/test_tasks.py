@@ -16,6 +16,7 @@ from tasks import (  # noqa: E402
     pick_workspace,
     render_html,
     task_from_url,
+    task_worktree,
     validate,
 )
 
@@ -172,6 +173,12 @@ def test_pick_workspace_falls_back_to_the_first_match():
 
 def test_pick_workspace_without_a_match_is_none():
     assert pick_workspace([{"workspace_id": "w2", "label": "other", "focused": True}], "emailopsv2") is None
+
+
+def test_task_worktree_is_named_after_the_task_file():
+    path, branch = task_worktree("T-0002-chat-app-control-tools.md", pathlib.Path("/repo"))
+    assert path == pathlib.Path("/repo/.claude/worktrees/T-0002-chat-app-control-tools")
+    assert branch == "feature/T-0002-chat-app-control-tools"
 
 
 # --- render_html ----------------------------------------------------------

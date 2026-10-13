@@ -48,6 +48,7 @@ Why the task exists and what it touches.
 - `make task-handler` (macOS, run from the main checkout): registers the
   `emailops-task://` scheme. From the next `make tasks-html` on, the button
   reads **Open in Herdr**: it focuses the task's agent if Herdr already runs
-  one, otherwise it opens a Herdr tab on the main checkout, starts Claude and
-  types `/work-on-task T-NNNN` (not sent). Delete
+  one, otherwise it creates (or reuses) the task's worktree
+  `.claude/worktrees/T-NNNN-slug` on `feature/T-NNNN-slug`, opens a Herdr tab
+  there, starts Claude and types `/work-on-task T-NNNN` (not sent). Delete
   `~/Applications/EmailOps Task Handler.app` to go back to the deep link.

@@ -11,9 +11,12 @@ source of truth for what to build; `tasks/README.md` documents the format.
 
 ## 1. Find the task
 
-- Read `tasks/<id>-*.md` from the main checkout's `main` branch
-  (`git show origin/main:tasks/...` after `git fetch origin main`). No such
-  file → say so and stop; do not invent a task.
+- If this session already runs in the task's worktree (the board's "Open in
+  Herdr" button creates `.claude/worktrees/<id>-<slug>` on
+  `feature/<id>-<slug>` and starts Claude there), read `tasks/<id>-*.md` from
+  it and skip to step 3. Otherwise read it from the main checkout's `main`
+  branch (`git show origin/main:tasks/...` after `git fetch origin main`).
+  No such file → say so and stop; do not invent a task.
 - If `status` is `done` or `dropped`, say so and ask whether to reopen it.
 - If another worktree already has this task at `doing`/`review`
   (`git worktree list`, then read `tasks/<id>-*.md` in each), resume there

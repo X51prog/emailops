@@ -19,8 +19,10 @@ Usage:
       emailops-task:// handler is installed (make task-handler), "Open" goes to Herdr.
   tasks.py open-in-herdr URL
       Handle an emailops-task://open?task=T-NNNN link: focus the task's agent if
-      Herdr already runs one, otherwise open a tab on the main checkout, start
-      Claude in it and type /work-on-task T-NNNN without sending it.
+      Herdr already runs one, otherwise create (or reuse) the task's worktree,
+      open a Herdr tab there, start Claude and type /work-on-task T-NNNN without
+      sending it. Starting in the worktree, not the main checkout, means the
+      session sees the repo's skills whatever branch the main checkout is on.
 """
 
 # The URL handler runs macOS /usr/bin/python3 (3.9): keep annotations lazy.
@@ -49,6 +51,7 @@ MAIN = "main"  # label of the main checkout
 RELOAD_SECONDS = 20
 ACTIVE_MINUTES = 10  # a worktree changed this recently counts as having an agent on it
 SCHEME = "emailops-task"
+TASK_BASE = "chore/sdlc-automation"  # TODO: origin/main once this branch is merged (work-on-task lives there)
 HANDLER_APP = Path.home() / "Applications" / "EmailOps Task Handler.app"  # installed by make task-handler
 
 
@@ -170,6 +173,12 @@ def task_from_url(url):
     if parts.scheme != SCHEME or parts.netloc != "open" or len(ids) != 1 or not ID_RE.match(ids[0]):
         raise ValueError(f"not a task link: {url!r}")
     return ids[0]
+
+
+def task_worktree(file_name, root):
+    """(path, branch) of a task's worktree, named after its file: T-0002-slug.md. Pure."""
+    stem = Path(file_name).stem
+    return root / ".claude" / "worktrees" / stem, f"feature/{stem}"
 
 
 def agent_name(task_id):
@@ -450,19 +459,29 @@ def cmd_open_in_herdr(url):
     task_id = task_from_url(url)
     os.chdir(Path(__file__).resolve().parent)  # the URL handler starts in /
     root = main_root()
-    if not any(t.id == task_id for path, _ in worktrees() for t in read_tasks(path, path.name)[0]):
-        raise ValueError(f"no task {task_id} in any worktree")
+    trees = worktrees()
+    files = {t.file for path, _ in trees for t in read_tasks(path, path.name)[0] if t.id == task_id}
+    if len(files) != 1:
+        raise ValueError(f"task {task_id}: expected one file across worktrees, found {sorted(files) or 'none'}")
     name = agent_name(task_id)
     try:
         herdr("agent", "focus", name)
         return 0  # that task already has a live agent
     except RuntimeError:
         pass
+    path, branch = task_worktree(files.pop(), root)
+    cwd = next((p for p, b in trees if b == branch), None)
+    if cwd is None:
+        if subprocess.run(["git", "rev-parse", "--verify", "-q", f"refs/heads/{branch}"], capture_output=True).returncode == 0:
+            git("worktree", "add", str(path), branch)  # the branch outlived its worktree
+        else:
+            git("worktree", "add", "-b", branch, str(path), TASK_BASE)
+        cwd = path
     ws = pick_workspace(herdr("workspace", "list")["result"]["workspaces"], root.name)
     if ws is None:
-        made = herdr("workspace", "create", "--cwd", root, "--label", root.name, "--focus")["result"]
+        made = herdr("workspace", "create", "--cwd", cwd, "--label", root.name, "--focus")["result"]
     else:
-        made = herdr("tab", "create", "--workspace", ws, "--cwd", root, "--label", task_id, "--focus")["result"]
+        made = herdr("tab", "create", "--workspace", ws, "--cwd", cwd, "--label", task_id, "--focus")["result"]
         herdr("workspace", "focus", ws)
     pane = made["root_pane"]["pane_id"]
     herdr("agent", "start", name, "--kind", "claude", "--pane", pane)
