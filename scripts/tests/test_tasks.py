@@ -10,7 +10,9 @@ from tasks import (  # noqa: E402
     WorktreeInfo,
     deep_link,
     is_active,
+    add_milestone,
     agents_by_task,
+    edit_location,
     merge,
     needs_you,
     parse_milestones,
@@ -87,6 +89,39 @@ def test_parse_milestones_reads_the_list_items():
 def test_a_milestone_missing_from_the_list_is_an_error():
     assert any("milestone" in e for e in validate([task()], milestones=["later"]))
     assert validate([task()], milestones=["0.7.0"]) == []
+
+
+def test_add_milestone_appends_a_list_item():
+    assert add_milestone("# Milestones\n\n- 0.7.0\n- later\n", "0.8.0") == "# Milestones\n\n- 0.7.0\n- later\n- 0.8.0\n"
+
+
+def test_add_milestone_rejects_a_duplicate_or_a_bad_name():
+    for name in ("later", "", "a b", "../x", "x" * 40, "<b>"):
+        try:
+            add_milestone("- later\n", name)
+        except ValueError:
+            continue
+        raise AssertionError(f"accepted {name!r}")
+
+
+# --- edit_location ------------------------------------------------------------
+
+
+def test_a_task_nobody_started_is_edited_on_the_board_branch():
+    assert edit_location(task(worktree="main")) == "tasks-board"
+    assert edit_location(task(worktree="tasks-board")) == "tasks-board"
+
+
+def test_a_task_in_progress_is_edited_in_its_own_worktree():
+    assert edit_location(task(status="doing", worktree="T-0001-x")) == "T-0001-x"
+
+
+def test_a_task_on_a_remote_branch_cannot_be_edited_here():
+    try:
+        edit_location(task(status="doing", worktree="origin/feature/T-0001-x"))
+    except ValueError:
+        return
+    raise AssertionError("expected ValueError")
 
 
 # --- set_field / prune_done -------------------------------------------------
@@ -210,6 +245,25 @@ def test_html_carries_the_deep_link_and_copy_command():
     html = render([task()])
     assert "claude-cli://open?q=%2Fwork-on-task%20T-0001&amp;repo=owner%2Frepo" in html
     assert 'claude &quot;/work-on-task T-0001&quot;' in html
+
+
+def test_served_card_lets_you_change_the_milestone():
+    html = render([task()], token="tok", milestones=["0.7.0", "0.8.0"])
+    assert '<select class="msel" data-task="T-0001">' in html
+    assert '<option value="0.7.0" selected>' in html
+    assert 'id="newms"' in html
+
+
+def test_only_a_task_nobody_started_can_be_deleted():
+    assert 'data-delete="T-0001"' in render([task()], token="tok")
+    assert "data-delete" not in render([task(status="doing", worktree="T-0001-x")], token="tok")
+
+
+def test_static_page_has_no_edit_controls():
+    html = render([task()])
+    assert "data-delete" not in html
+    assert 'class="msel"' not in html
+    assert 'id="newms"' not in html
 
 
 def test_html_auto_refreshes_and_shows_generation_time():

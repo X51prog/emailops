@@ -60,6 +60,13 @@ Why the task exists and what it touches.
   one, otherwise it creates (or reuses) the task's worktree
   `.claude/worktrees/T-NNNN-slug` on `feature/T-NNNN-slug`, opens a Herdr tab
   there, starts Claude and types `/work-on-task T-NNNN` (not sent).
+  The served board also edits: **New milestone** (appended to
+  `tasks/milestones.md`), a milestone picker on each card, and **Delete** for a
+  task nobody started (two clicks). Each edit is one commit on
+  `chore/tasks-board` (worktree `.claude/worktrees/tasks-board`, created on
+  first use), or on the task's own branch once it is started; a refused commit
+  (pre-commit hook) leaves the file as it was. Nothing is pushed: merge
+  `chore/tasks-board` through a PR when you want the edits on `main`.
 - What the board shows per task: the base branch's file, overridden by the
   board branch `chore/tasks-board` (edits made from the board), by the task's
   own worktree (uncommitted edits included) and by a pushed

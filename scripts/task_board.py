@@ -15,6 +15,10 @@ Usage:
       - needs you: focus the agent waiting for input and raise the terminal
         app Herdr runs in.
       - Details: the agent's latest output.
+      - Milestones: create one, or move a task to another. Delete a task
+        nobody started. Edits are committed on chore/tasks-board (its worktree
+        is .claude/worktrees/tasks-board, created on first use), or on the
+        task's own branch once it is started. Nothing is pushed.
 """
 
 from __future__ import annotations
@@ -32,7 +36,23 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from tasks import ID_RE, TASK_BASE, agents_by_task, build_page, collect, git, worktrees
+from tasks import (
+    BOARD,
+    BOARD_BRANCH,
+    ID_RE,
+    MAIN,
+    TASK_BASE,
+    add_milestone,
+    agents_by_task,
+    build_page,
+    collect,
+    edit_location,
+    git,
+    main_root,
+    parse_task,
+    set_field,
+    worktrees,
+)
 
 PORT = 8780
 FETCH_SECONDS = 60  # how often the server fetches origin, to see task branches pushed elsewhere
@@ -169,19 +189,84 @@ def agent_output(task_id):
     return herdr(*on_machine(agent.machine_id, "agent", "read", agent.pane_id, *read_args(agent.status)), raw=True)
 
 
-def open_in_herdr(task_id):
+def branch_exists(branch):
+    return subprocess.run(["git", "rev-parse", "--verify", "-q", f"refs/heads/{branch}"], capture_output=True).returncode == 0
+
+
+def find_task(task_id):
+    """(main checkout, task, milestones) as the board shows them now."""
     if not ID_RE.match(task_id):
         raise ValueError(f"not a task id: {task_id!r}")
-    if task_id in live_agents()[0]:
-        return focus(task_id)
-    root, tasks, *_ = collect()
+    root, tasks, _, milestones, _ = collect()
     task = next((t for t in tasks if t.id == task_id), None)
     if task is None:
         raise ValueError(f"no task {task_id}")
+    return root, task, milestones
+
+
+def board_worktree(root):
+    """The checkout the board commits to, created off TASK_BASE on first use."""
+    path = root / ".claude" / "worktrees" / BOARD
+    if not path.exists():
+        if branch_exists(BOARD_BRANCH):
+            git("worktree", "add", str(path), BOARD_BRANCH)
+        else:
+            git("worktree", "add", "-b", BOARD_BRANCH, str(path), TASK_BASE)
+    return path
+
+
+def commit(cwd, path, message):
+    """Commit one already-staged path; on failure put it back as it was."""
+    try:
+        git("commit", "-q", "-m", message, "--", path, cwd=cwd)
+    except subprocess.CalledProcessError as err:
+        git("reset", "-q", "HEAD", "--", path, cwd=cwd)
+        git("checkout", "-q", "HEAD", "--", path, cwd=cwd)
+        raise ValueError(f"commit refused: {(err.stderr or err.stdout or '').strip()[-400:]}") from err
+
+
+def new_milestone(query):
+    name = query.get("name", "")
+    board = board_worktree(main_root())
+    file = board / "tasks" / "milestones.md"
+    file.write_text(add_milestone(file.read_text(encoding="utf-8"), name), encoding="utf-8")
+    git("add", "tasks/milestones.md", cwd=board)
+    commit(board, "tasks/milestones.md", f"chore: add milestone {name}")
+
+
+def set_milestone(query):
+    root, task, milestones = find_task(query.get("task", ""))
+    name = query.get("name", "")
+    if name not in milestones:
+        raise ValueError(f"no milestone {name!r}; create it first")
+    where = edit_location(task)
+    cwd = board_worktree(root) if where == BOARD else root / ".claude" / "worktrees" / where
+    file = cwd / "tasks" / task.file
+    text = file.read_text(encoding="utf-8")
+    if parse_task(text, task.file, where).milestone == name:
+        return
+    file.write_text(set_field(text, "milestone", name), encoding="utf-8")
+    git("add", f"tasks/{task.file}", cwd=cwd)
+    commit(cwd, f"tasks/{task.file}", f"chore: move {task.id} to milestone {name}")
+
+
+def delete_task(query):
+    root, task, _ = find_task(query.get("task", ""))
+    if task.worktree not in (MAIN, BOARD):
+        raise ValueError(f"{task.id} is in progress ({task.worktree}); drop it there instead")
+    board = board_worktree(root)
+    git("rm", "-q", f"tasks/{task.file}", cwd=board)
+    commit(board, f"tasks/{task.file}", f"chore: delete {task.id}")
+
+
+def open_in_herdr(task_id):
+    if task_id in live_agents()[0]:
+        return focus(task_id)
+    root, task, _ = find_task(task_id)
     path, branch = task_worktree(task.file, root)
     cwd = next((p for p, b in worktrees() if b == branch), None)
     if cwd is None:
-        if subprocess.run(["git", "rev-parse", "--verify", "-q", f"refs/heads/{branch}"], capture_output=True).returncode == 0:
+        if branch_exists(branch):
             git("worktree", "add", str(path), branch)  # the branch outlived its worktree
         else:
             git("worktree", "add", "-b", branch, str(path), TASK_BASE)
@@ -209,7 +294,13 @@ def fetch_forever():
 
 def serve(port):
     token = secrets.token_urlsafe(16)
-    actions = {"/open": open_in_herdr, "/focus": focus}
+    actions = {
+        "/open": lambda q: open_in_herdr(q.get("task", "")),
+        "/focus": lambda q: focus(q.get("task", "")),
+        "/milestone/new": new_milestone,
+        "/milestone/set": set_milestone,
+        "/delete": delete_task,
+    }
 
     class Handler(BaseHTTPRequestHandler):
         def reply(self, code, body, kind):
@@ -242,7 +333,7 @@ def serve(port):
             if not authorized("POST", self.path, self.headers, token, port) or route not in actions:
                 return self.reply(404, "not found", "text/plain")
             try:
-                actions[route](self.task())
+                actions[route]({k: v[0] for k, v in parse_qs(urlsplit(self.path).query).items()})
                 self.reply(200, json.dumps({"ok": True}), "application/json")
             except (ValueError, RuntimeError, subprocess.CalledProcessError) as err:
                 print(f"POST {route} {self.task()}: {err}", file=sys.stderr)
