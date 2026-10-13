@@ -74,6 +74,13 @@ export function ReadingPane({
     else onCloseMain();
   };
 
+  // Attachment tabs stay mounted while another tab is shown: the PDF viewer
+  // lives in an opaque-origin iframe whose scroll position cannot be read or
+  // restored, so unmounting it would send the reader back to page one. The
+  // inactive ones are `invisible`, not `hidden`, so the viewer keeps its size
+  // and does not re-lay out the document on return.
+  const attachmentTabs = tabs.filter((tab) => tab.type === 'attachment');
+
   return (
     <div className={className}>
       {tabs.length > 0 && (
@@ -88,23 +95,32 @@ export function ReadingPane({
         />
       )}
 
-      {activeTab?.type === 'attachment' ? (
-        <AttachmentTabView tab={activeTab} onClose={closeActive} />
-      ) : activeTab?.type === 'compose' ? (
-        <ComposeTabView tab={activeTab} accounts={accounts} onClose={() => onCloseTab(activeTab.id)} />
-      ) : (
-        <EmailView
-          threadEmails={shownThread}
-          isLoading={shownIsLoading}
-          onClose={closeActive}
-          accounts={accounts}
-          activeAccountId={activeAccountId}
-          fullWidth={fullWidth}
-          onOpenInTab={onOpenInTab}
-          onChatAboutThread={onChatAboutThread}
-          focusEmailId={activeTab?.type === 'thread' ? activeTab.focusEmailId : undefined}
-        />
-      )}
+      <div className="relative flex flex-col flex-1 overflow-hidden">
+        {attachmentTabs.map((tab) => (
+          <div
+            key={tab.id}
+            data-attachment-tab
+            className={`absolute inset-0 flex flex-col ${tab.id === activeTabId ? '' : 'invisible'}`}
+          >
+            <AttachmentTabView tab={tab} onClose={closeActive} />
+          </div>
+        ))}
+        {activeTab?.type === 'attachment' ? null : activeTab?.type === 'compose' ? (
+          <ComposeTabView tab={activeTab} accounts={accounts} onClose={() => onCloseTab(activeTab.id)} />
+        ) : (
+          <EmailView
+            threadEmails={shownThread}
+            isLoading={shownIsLoading}
+            onClose={closeActive}
+            accounts={accounts}
+            activeAccountId={activeAccountId}
+            fullWidth={fullWidth}
+            onOpenInTab={onOpenInTab}
+            onChatAboutThread={onChatAboutThread}
+            focusEmailId={activeTab?.type === 'thread' ? activeTab.focusEmailId : undefined}
+          />
+        )}
+      </div>
     </div>
   );
 }
