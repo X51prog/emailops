@@ -15,20 +15,27 @@ Usage:
       (branch, last commit, dirty files, commits ahead of origin/main, minutes since
       the last change, and whether an agent is on it: a claude process inside it or a
       change in the last 10 minutes) and write one self-contained page. Default output:
-      <main checkout>/tasks/index.html (gitignored). Read-only otherwise.
+      <main checkout>/tasks/index.html (gitignored). Read-only otherwise. When the
+      emailops-task:// handler is installed (make task-handler), "Open" goes to Herdr.
+  tasks.py open-in-herdr URL
+      Handle an emailops-task://open?task=T-NNNN link: focus the task's agent if
+      Herdr already runs one, otherwise open a tab on the main checkout, start
+      Claude in it and type /work-on-task T-NNNN without sending it.
 """
 
 import argparse
 import html
+import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote, urlsplit
 
 STATUSES = ("todo", "doing", "review", "done", "dropped")
 # Merge order across worktrees: a later status means more progress.
@@ -38,6 +45,8 @@ ID_RE = re.compile(r"^T-\d{4}$")
 MAIN = "main"  # label of the main checkout
 RELOAD_SECONDS = 20
 ACTIVE_MINUTES = 10  # a worktree changed this recently counts as having an agent on it
+SCHEME = "emailops-task"
+HANDLER_APP = Path.home() / "Applications" / "EmailOps Task Handler.app"  # installed by make task-handler
 
 
 @dataclass
@@ -143,7 +152,36 @@ def deep_link(task_id, repo):
     return f"claude-cli://open?q={quote('/work-on-task ' + task_id, safe='')}&repo={quote(repo, safe='')}"
 
 
-def render_html(tasks, worktrees, repo, generated, warnings=()):
+def herdr_link(task_id):
+    """emailops-task:// link, handled by open-in-herdr once make task-handler installed it."""
+    return f"{SCHEME}://open?task={task_id}"
+
+
+def task_from_url(url):
+    """The task id in an emailops-task:// link. Pure.
+
+    Any web page can fire the scheme, so anything but one well-formed id is refused.
+    """
+    parts = urlsplit(url)
+    ids = parse_qs(parts.query).get("task", [])
+    if parts.scheme != SCHEME or parts.netloc != "open" or len(ids) != 1 or not ID_RE.match(ids[0]):
+        raise ValueError(f"not a task link: {url!r}")
+    return ids[0]
+
+
+def agent_name(task_id):
+    """Herdr agent name for a task (names are lowercase)."""
+    return task_id.lower()
+
+
+def pick_workspace(workspaces, label):
+    """Id of the Herdr workspace labelled after the repo, the focused one first. Pure."""
+    hits = [w for w in workspaces if w["label"] == label]
+    hits.sort(key=lambda w: not w["focused"])
+    return hits[0]["workspace_id"] if hits else None
+
+
+def render_html(tasks, worktrees, repo, generated, warnings=(), launcher="claude"):
     """The board as one self-contained page. Pure."""
     e = html.escape
     milestones = sorted({t.milestone for t in tasks})
@@ -165,12 +203,13 @@ def render_html(tasks, worktrees, repo, generated, warnings=()):
                     f"<span>{wt.dirty} changed · {wt.ahead} ahead of origin/main · last change {wt.idle_min} min ago</span></div>"
                 )
             command = f'claude "/work-on-task {t.id}"'
+            open_href, open_label = (herdr_link(t.id), "Open in Herdr") if launcher == "herdr" else (deep_link(t.id, repo), "Open in Claude")
             cards.append(
                 f'<article class="card" id="{e(t.id)}" data-milestone="{e(t.milestone)}" '
                 f'data-text="{e((t.id + " " + t.title + " " + t.body).lower())}">'
                 f'<header><span class="tid">{e(t.id)}</span>{"".join(meta)}</header>'
                 f'<h3>{e(t.title)}</h3>{activity}'
-                f'<div class="actions"><a class="btn primary" href="{e(deep_link(t.id, repo))}">Open in Claude</a>'
+                f'<div class="actions"><a class="btn primary" href="{e(open_href)}">{open_label}</a>'
                 f'<button class="btn" data-copy="{e(command)}">Copy command</button>'
                 f'<button class="btn" data-open="{e(t.id)}">Details</button></div>'
                 f'<pre class="body" hidden>{e(t.body)}</pre></article>'
@@ -383,7 +422,8 @@ def cmd_html(out):
         warnings += [f"{label}: {err}" for err in errors]
         if tasks:
             infos[label] = activity(path, branch, label, path in busy, time.time())
-    page = render_html(merge(found), infos, repo_slug(), datetime.now().strftime("%d/%m/%Y %H:%M"), warnings)
+    launcher = "herdr" if HANDLER_APP.exists() else "claude"
+    page = render_html(merge(found), infos, repo_slug(), datetime.now().strftime("%d/%m/%Y %H:%M"), warnings, launcher)
     target = Path(out) if out else root / "tasks" / "index.html"
     target.parent.mkdir(parents=True, exist_ok=True)
     tmp = target.with_suffix(".tmp")
@@ -393,13 +433,51 @@ def cmd_html(out):
     return 0
 
 
+def herdr(*args):
+    """Run a Herdr CLI command and return its JSON reply."""
+    # The URL handler runs with launchd's PATH, which lacks the default install dir.
+    exe = shutil.which("herdr") or str(Path.home() / ".local" / "bin" / "herdr")
+    proc = subprocess.run([exe, *map(str, args)], capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise RuntimeError(f"herdr {' '.join(map(str, args))}: {proc.stderr.strip() or proc.returncode}")
+    return json.loads(proc.stdout) if proc.stdout.strip() else {}
+
+
+def cmd_open_in_herdr(url):
+    task_id = task_from_url(url)
+    os.chdir(Path(__file__).resolve().parent)  # the URL handler starts in /
+    root = main_root()
+    if not any(t.id == task_id for path, _ in worktrees() for t in read_tasks(path, path.name)[0]):
+        raise ValueError(f"no task {task_id} in any worktree")
+    name = agent_name(task_id)
+    try:
+        herdr("agent", "focus", name)
+        return 0  # that task already has a live agent
+    except RuntimeError:
+        pass
+    ws = pick_workspace(herdr("workspace", "list")["result"]["workspaces"], root.name)
+    if ws is None:
+        made = herdr("workspace", "create", "--cwd", root, "--label", root.name, "--focus")["result"]
+    else:
+        made = herdr("tab", "create", "--workspace", ws, "--cwd", root, "--label", task_id, "--focus")["result"]
+        herdr("workspace", "focus", ws)
+    pane = made["root_pane"]["pane_id"]
+    herdr("agent", "start", name, "--kind", "claude", "--pane", pane)
+    herdr("pane", "send-text", pane, f"/work-on-task {task_id}")
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("check")
     html_p = sub.add_parser("html")
     html_p.add_argument("--out")
+    open_p = sub.add_parser("open-in-herdr")
+    open_p.add_argument("url")
     args = parser.parse_args()
+    if args.cmd == "open-in-herdr":
+        return cmd_open_in_herdr(args.url)
     return cmd_check() if args.cmd == "check" else cmd_html(args.out)
 
 

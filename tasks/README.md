@@ -45,3 +45,9 @@ Why the task exists and what it touches.
 - The board's **Open in Claude** button is a `claude-cli://` deep link that
   opens a terminal with `/work-on-task T-NNNN` typed in. **Copy command** puts
   the same command on the clipboard when the link handler is not registered.
+- `make task-handler` (macOS, run from the main checkout): registers the
+  `emailops-task://` scheme. From the next `make tasks-html` on, the button
+  reads **Open in Herdr**: it focuses the task's agent if Herdr already runs
+  one, otherwise it opens a Herdr tab on the main checkout, starts Claude and
+  types `/work-on-task T-NNNN` (not sent). Delete
+  `~/Applications/EmailOps Task Handler.app` to go back to the deep link.

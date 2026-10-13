@@ -7,11 +7,15 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from tasks import (  # noqa: E402
     Task,
     WorktreeInfo,
+    agent_name,
     deep_link,
+    herdr_link,
     is_active,
     merge,
     parse_task,
+    pick_workspace,
     render_html,
+    task_from_url,
     validate,
 )
 
@@ -120,6 +124,56 @@ def test_deep_link_encodes_the_prompt_and_repo():
     assert deep_link("T-0001", "owner/repo") == "claude-cli://open?q=%2Fwork-on-task%20T-0001&repo=owner%2Frepo"
 
 
+# --- Herdr launcher -------------------------------------------------------
+
+
+def test_herdr_link_names_the_task():
+    assert herdr_link("T-0001") == "emailops-task://open?task=T-0001"
+
+
+def test_task_from_url_reads_the_id():
+    assert task_from_url("emailops-task://open?task=T-0042") == "T-0042"
+
+
+def test_task_from_url_rejects_anything_else():
+    # Any web page can fire this scheme; only a bare task id gets through.
+    for url in (
+        "emailops-task://open?task=T-42",
+        "emailops-task://open?task=T-0001;rm",
+        "emailops-task://open?task=T-0001&task=T-0002",
+        "emailops-task://run?task=T-0001",
+        "claude-cli://open?task=T-0001",
+        "emailops-task://open",
+    ):
+        try:
+            task_from_url(url)
+        except ValueError:
+            continue
+        raise AssertionError(f"accepted {url}")
+
+
+def test_agent_name_is_a_valid_herdr_name():
+    assert agent_name("T-0007") == "t-0007"
+
+
+def test_pick_workspace_prefers_the_focused_one_with_the_repo_label():
+    ws = [
+        {"workspace_id": "w1", "label": "emailopsv2", "focused": False},
+        {"workspace_id": "w2", "label": "other", "focused": True},
+        {"workspace_id": "w3", "label": "emailopsv2", "focused": True},
+    ]
+    assert pick_workspace(ws, "emailopsv2") == "w3"
+
+
+def test_pick_workspace_falls_back_to_the_first_match():
+    ws = [{"workspace_id": "w2", "label": "other", "focused": True}, {"workspace_id": "w4", "label": "emailopsv2", "focused": False}]
+    assert pick_workspace(ws, "emailopsv2") == "w4"
+
+
+def test_pick_workspace_without_a_match_is_none():
+    assert pick_workspace([{"workspace_id": "w2", "label": "other", "focused": True}], "emailopsv2") is None
+
+
 # --- render_html ----------------------------------------------------------
 
 
@@ -138,6 +192,13 @@ def test_html_carries_the_deep_link_and_copy_command():
     html = render([task()])
     assert "claude-cli://open?q=%2Fwork-on-task%20T-0001&amp;repo=owner%2Frepo" in html
     assert 'claude &quot;/work-on-task T-0001&quot;' in html
+
+
+def test_html_opens_in_herdr_when_the_handler_is_installed():
+    html = render([task()], launcher="herdr")
+    assert 'href="emailops-task://open?task=T-0001"' in html
+    assert "Open in Herdr" in html
+    assert "claude-cli://" not in html
 
 
 def test_html_auto_refreshes_and_shows_generation_time():
