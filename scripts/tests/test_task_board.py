@@ -6,6 +6,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from task_board import (  # noqa: E402
     agent_name,
+    artifact_target,
     authorized,
     pick_workspace,
     read_args,
@@ -132,3 +133,27 @@ def test_a_busy_or_blocked_agent_is_read_from_its_screen():
     # Herdr refuses scrollback while the agent is not idle; the screen shows the pending question.
     for status in ("working", "blocked", "unknown"):
         assert read_args(status) == ("--source", "visible")
+
+
+def test_the_token_may_come_from_the_board_cookie():
+    # A report's relative assets (css, images) are fetched without the URL token.
+    assert authorized("GET", "/a/T-0001/0/style.css", {"Host": "127.0.0.1:8780", "Cookie": "x=1; board=tok"}, token="tok", port=8780)
+    assert not authorized("GET", "/a/T-0001/0/style.css", {"Host": "127.0.0.1:8780", "Cookie": "board=nope"}, token="tok", port=8780)
+
+
+# --- artifact_target --------------------------------------------------------
+
+
+def test_artifact_target_serves_the_file_and_its_siblings():
+    base = "/w/reports/run1/index.html"
+    assert artifact_target(base, "index.html") == pathlib.Path("/w/reports/run1/index.html")
+    assert artifact_target(base, "assets/style.css") == pathlib.Path("/w/reports/run1/assets/style.css")
+
+
+def test_artifact_target_refuses_to_leave_the_artifact_folder():
+    for rel in ("../secret.txt", "assets/../../x", "/etc/passwd", ""):
+        try:
+            artifact_target("/w/reports/run1/index.html", rel)
+        except ValueError:
+            continue
+        raise AssertionError(f"served {rel!r}")

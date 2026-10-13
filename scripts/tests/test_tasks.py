@@ -10,6 +10,7 @@ from tasks import (  # noqa: E402
     WorktreeInfo,
     deep_link,
     is_active,
+    add_artifact,
     add_milestone,
     agents_by_task,
     edit_location,
@@ -102,6 +103,30 @@ def test_add_milestone_rejects_a_duplicate_or_a_bad_name():
         except ValueError:
             continue
         raise AssertionError(f"accepted {name!r}")
+
+
+# --- artifacts ----------------------------------------------------------------
+
+
+def test_add_artifact_puts_the_newest_first():
+    entries = add_artifact([], "/w/a.html", "eval report", "13/10/2026 10:00")
+    entries = add_artifact(entries, "/w/b.png", "screenshot", "13/10/2026 10:05")
+    assert [e["path"] for e in entries] == ["/w/b.png", "/w/a.html"]
+
+
+def test_re_adding_an_artifact_moves_it_to_the_top_with_the_new_label():
+    entries = add_artifact(add_artifact([], "/w/a.html", "old", "t1"), "/w/b.png", "shot", "t2")
+    entries = add_artifact(entries, "/w/a.html", "eval report", "t3")
+    assert entries[0] == {"path": "/w/a.html", "label": "eval report", "at": "t3"}
+    assert len(entries) == 2
+
+
+def test_add_artifact_keeps_the_last_twenty():
+    entries = []
+    for i in range(25):
+        entries = add_artifact(entries, f"/w/{i}.txt", str(i), "t")
+    assert len(entries) == 20
+    assert entries[0]["path"] == "/w/24.txt"
 
 
 # --- edit_location ------------------------------------------------------------
@@ -264,6 +289,18 @@ def test_static_page_has_no_edit_controls():
     assert "data-delete" not in html
     assert 'class="msel"' not in html
     assert 'id="newms"' not in html
+
+
+def test_card_links_the_latest_artifact_through_the_server():
+    arts = {"T-0001": [{"path": "/w/reports/run 1/index.html", "label": "eval report", "at": "t"}]}
+    html = render([task()], token="tok", artifacts=arts)
+    assert 'href="/a/T-0001/0/index.html"' in html
+    assert "eval report" in html
+
+
+def test_static_card_links_the_artifact_as_a_file():
+    arts = {"T-0001": [{"path": "/w/reports/run 1/index.html", "label": "eval report", "at": "t"}]}
+    assert 'href="file:///w/reports/run%201/index.html"' in render([task()], artifacts=arts)
 
 
 def test_html_auto_refreshes_and_shows_generation_time():

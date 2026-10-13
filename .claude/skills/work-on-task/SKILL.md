@@ -52,6 +52,13 @@ triggers the board-refresh hook.
   surface, `fix-ai-bug` for AI misbehaviour), the `gate-runner` subagent at
   each green checkpoint, and a commit per checkpoint.
 - Update the Progress line at each checkpoint.
+- Whenever the session produces something the developer will want to open
+  (an eval report, a `make verify` summary, a screenshot, a benchmark run),
+  record it from the worktree:
+  `python3 scripts/tasks.py artifact <path> --label "<what it is>"`. The
+  board links the latest one on the card and lists them all in Details. The
+  list is gitignored (absolute local paths); the files stay where they are,
+  so keep personal-data reports in their gitignored folders.
 
 ## 5. Hand off
 

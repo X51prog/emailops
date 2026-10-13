@@ -10,6 +10,11 @@ Usage:
   tasks.py check
       Validate the task files of this checkout (milestones must be listed in
       tasks/milestones.md). Exit 1 on any error.
+  tasks.py artifact PATH [--label TEXT]
+      From inside a task worktree: record a file the session produced (an eval
+      report, a verification summary, a screenshot) in that worktree's
+      .claude/task-artifacts.local.json (gitignored: absolute local paths).
+      The board links the latest one on the card and lists them in Details.
   tasks.py prune-done
       git rm the done tasks of this checkout; the release skill runs it so a
       release commit drops the tasks it shipped.
@@ -55,6 +60,8 @@ BOARD_BRANCH = "chore/tasks-board"
 TASK_BRANCH_RE = re.compile(r"^(?:feature|fix|refactor)/(T-\d{4})-")
 TASK_PATH_RE = re.compile(r"/\.claude/worktrees/(T-\d{4})-[^/]*(?:/|$)")
 MILESTONE_RE = re.compile(r"^[0-9A-Za-z][0-9A-Za-z._-]{0,31}$")
+ARTIFACTS = Path(".claude") / "task-artifacts.local.json"  # per task worktree, gitignored
+MAX_ARTIFACTS = 20
 NEEDS_YOU = ("blocked", "done")  # Herdr states where the agent waits for the user
 RELOAD_SECONDS = 20
 ACTIVE_MINUTES = 10  # a worktree changed this recently counts as having an agent on it
@@ -146,6 +153,12 @@ def add_milestone(text, name):
     if name in parse_milestones(text):
         raise ValueError(f"milestone {name} already exists")
     return text.rstrip("\n") + f"\n- {name}\n"
+
+
+def add_artifact(entries, path, label, at):
+    """The artifact list with path on top (once), capped at MAX_ARTIFACTS. Pure."""
+    rest = [e for e in entries if e["path"] != path]
+    return [{"path": path, "label": label, "at": at}, *rest][:MAX_ARTIFACTS]
 
 
 def edit_location(task):
@@ -261,11 +274,16 @@ def agents_by_task(entries):
     return found
 
 
-def render_html(tasks, worktrees, repo, generated, warnings=(), token=None, milestones=(), agents=None):
+def render_html(tasks, worktrees, repo, generated, warnings=(), token=None, milestones=(), agents=None, artifacts=None):
     """The board as one self-contained page; with a token, the live page tasks.py serve returns. Pure."""
     e = html.escape
     milestones = list(milestones) + sorted({t.milestone for t in tasks} - set(milestones))
     agents = agents or {}
+    artifacts = artifacts or {}
+
+    def artifact_href(task_id, i, path):
+        # Served: through the board (a page on http:// cannot open file://). Static: the file itself.
+        return f"/a/{task_id}/{i}/{quote(Path(path).name)}" if token else Path(path).as_uri()
     columns = []
     for status in STATUSES:
         cards = []
@@ -288,6 +306,13 @@ def render_html(tasks, worktrees, repo, generated, warnings=(), token=None, mile
                 if needs_you(ag.status):
                     chips.append(f'<button class="chip needs" data-focus="{e(t.id)}">needs you</button>' if token else '<span class="chip needs">needs you</span>')
                 live = f'<div class="live">{"".join(chips)}</div>'
+            arts = artifacts.get(t.id, [])
+            links = "".join(
+                f'<li><a href="{e(artifact_href(t.id, i, a["path"]))}" target="_blank" rel="noopener">{e(a["label"])}</a> <span class="state">{e(a["at"])}</span></li>'
+                for i, a in enumerate(arts)
+            )
+            if arts:
+                meta.append(f'<a class="pill" href="{e(artifact_href(t.id, 0, arts[0]["path"]))}" target="_blank" rel="noopener">{e(arts[0]["label"])}</a>')
             activity = ""
             if wt is not None and t.worktree not in (MAIN, BOARD) and t.status in ("doing", "review"):
                 if wt.remote:
@@ -317,7 +342,7 @@ def render_html(tasks, worktrees, repo, generated, warnings=(), token=None, mile
                 f'<button class="btn" data-copy="{e(command)}">Copy command</button>'
                 f'<button class="btn" data-open="{e(t.id)}">Details</button>'
                 f'{delete if token and t.worktree in (MAIN, BOARD) else ""}</div>'
-                f'<pre class="body" hidden>{e(t.body)}</pre></article>'
+                f'<pre class="body" hidden>{e(t.body)}</pre><ul class="arts" hidden>{links}</ul></article>'
             )
         columns.append(
             f'<section class="col" data-status="{status}"><h2>{status} <span class="count">{len(cards)}</span></h2>'
@@ -404,6 +429,7 @@ input, select {{ font:inherit; padding:5px 8px; border:1px solid var(--line); bo
 <div id="notes">{notes}</div>
 <main class="board">{columns}</main>
 <aside id="panel" hidden><button class="btn" id="close">Close</button><h2 id="ptitle"></h2><pre id="pbody"></pre>
+<h3 id="partsh" hidden>Artifacts</h3><ul id="parts" hidden></ul>
 <h3 id="pouth" hidden>Agent output</h3><pre id="pout" hidden></pre></aside>
 <script>
 const TOKEN = {token};
@@ -426,6 +452,8 @@ function openTask(id) {{
   document.getElementById("ptitle").textContent = id + " · " + card.querySelector("h3").textContent;
   document.getElementById("pbody").textContent = card.querySelector(".body").textContent;
   panel.hidden = false; writeHash(id);
+  const parts = document.getElementById("parts"), arts = card.querySelector(".arts");
+  parts.innerHTML = arts.innerHTML; parts.hidden = document.getElementById("partsh").hidden = !arts.children.length;
   const pout = document.getElementById("pout"), live = Boolean(TOKEN && card.dataset.agent);
   pout.hidden = document.getElementById("pouth").hidden = !live;
   if (live) fetch("/output?token=" + TOKEN + "&task=" + id, {{ cache: "no-store" }}).then(r => r.text()).then(t => {{ pout.textContent = t; }}, () => {{ pout.textContent = "Agent output unavailable"; }});
@@ -563,6 +591,14 @@ def activity(path, branch, label, has_process, now):
     )
 
 
+def read_artifacts(checkout):
+    path = checkout / ARTIFACTS
+    if not path.exists():
+        return []
+    # Only files that still exist: a report dir may have been cleaned since.
+    return [a for a in json.loads(path.read_text(encoding="utf-8")) if Path(a["path"]).exists()]
+
+
 def remote_activity(ref, now):
     """WorktreeInfo for a pushed task branch nobody has checked out here."""
     commit_time, summary = git("log", "-1", "--format=%ct%n%cr · %s", ref).split("\n", 1)
@@ -579,7 +615,7 @@ def remote_activity(ref, now):
 
 
 def collect():
-    """(main checkout, merged tasks, worktree infos, milestones, warnings) as they are right now."""
+    """(main checkout, merged tasks, worktree infos, milestones, warnings, artifacts by task id) as they are right now."""
     root = main_root()
     now = time.time()
     tasks, warnings = [], []
@@ -610,12 +646,13 @@ def collect():
         warnings.append(f"lsof unavailable, live agents not shown: {err}")
         cwds = []
     busy = {owner_of(c, [p for p, _ in trees]) for c in cwds}
-    infos = {}
+    infos, artifacts = {}, {}
     for path, branch in trees:
         m = TASK_BRANCH_RE.match(branch)
         if m:
             add(read_tasks(path, path.name, f"{m.group(1)}-*.md"), path.name)
             infos[path.name] = activity(path, branch, path.name, path in busy, now)
+            artifacts[m.group(1)] = read_artifacts(path)
     local = {b for _, b in trees}
     refs = git("for-each-ref", "--format=%(refname:short)", *(f"refs/remotes/origin/{k}/T-*" for k in ("feature", "fix", "refactor")))
     for ref in refs.split():
@@ -624,7 +661,7 @@ def collect():
         if m and branch not in local:
             add(read_ref_tasks(ref, ref, m.group(1)), ref)
             infos[ref] = remote_activity(ref, now)
-    return root, merge(tasks, deleted), infos, milestones, warnings
+    return root, merge(tasks, deleted), infos, milestones, warnings, artifacts
 
 
 def repo_slug():
@@ -651,9 +688,9 @@ def cmd_check():
 
 def build_page(token=None, agents=None, warnings=()):
     """(main checkout, page) built from collect()."""
-    root, tasks, infos, milestones, found_warnings = collect()
+    root, tasks, infos, milestones, found_warnings, artifacts = collect()
     stamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S" if token else "%d/%m/%Y %H:%M")
-    page = render_html(tasks, infos, repo_slug(), stamp, [*warnings, *found_warnings], token, milestones, agents)
+    page = render_html(tasks, infos, repo_slug(), stamp, [*warnings, *found_warnings], token, milestones, agents, artifacts)
     return root, page
 
 
@@ -665,6 +702,22 @@ def cmd_html(out):
     tmp.write_text(page, encoding="utf-8")
     os.replace(tmp, target)  # never leave a half-written page for the auto-reload to pick up
     print(target.as_uri())
+    return 0
+
+
+def cmd_artifact(path, label):
+    checkout = Path(git("rev-parse", "--show-toplevel").strip())
+    if not TASK_BRANCH_RE.match(git("branch", "--show-current").strip()):
+        raise ValueError("run it from a task worktree (branch feature/T-NNNN-...)")
+    file = Path(path).resolve()
+    if not file.is_file():
+        raise ValueError(f"no such file: {file}")
+    manifest = checkout / ARTIFACTS
+    entries = json.loads(manifest.read_text(encoding="utf-8")) if manifest.exists() else []
+    entries = add_artifact(entries, str(file), label or file.name, datetime.now().strftime("%d/%m/%Y %H:%M"))
+    manifest.parent.mkdir(exist_ok=True)
+    manifest.write_text(json.dumps(entries, indent=2) + "\n", encoding="utf-8")
+    print(f"recorded {file.name} ({len(entries)} artifacts)")
     return 0
 
 
@@ -686,11 +739,16 @@ def main():
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("check")
     sub.add_parser("prune-done")
+    art_p = sub.add_parser("artifact")
+    art_p.add_argument("path")
+    art_p.add_argument("--label")
     html_p = sub.add_parser("html")
     html_p.add_argument("--out")
     args = parser.parse_args()
     if args.cmd == "prune-done":
         return cmd_prune_done()
+    if args.cmd == "artifact":
+        return cmd_artifact(args.path, args.label)
     return cmd_check() if args.cmd == "check" else cmd_html(args.out)
 
 

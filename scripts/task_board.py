@@ -14,7 +14,9 @@ Usage:
         branch the main checkout is on.
       - needs you: focus the agent waiting for input and raise the terminal
         app Herdr runs in.
-      - Details: the agent's latest output.
+      - Details: the agent's latest output and the artifacts the session
+        recorded (tasks.py artifact), served from /a/T-NNNN/<n>/... so an HTML
+        report keeps its relative assets.
       - Milestones: create one, or move a task to another. Delete a task
         nobody started. Edits are committed on chore/tasks-board (its worktree
         is .claude/worktrees/tasks-board, created on first use), or on the
@@ -26,15 +28,18 @@ from __future__ import annotations
 import argparse
 import hmac
 import json
+import mimetypes
+import os
 import secrets
 import shutil
 import socket
 import subprocess
 import sys
 import threading
+from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
 from tasks import (
     BOARD,
@@ -85,10 +90,21 @@ def authorized(method, path, headers, token, port):
     own), and on POST a local Origin.
     """
     local = {f"127.0.0.1:{port}", f"localhost:{port}"}
-    given = parse_qs(urlsplit(path).query).get("token", [""])[0]
+    cookie = SimpleCookie(headers.get("Cookie", "")).get("board")
+    # The cookie covers what the page links without the token: an artifact's css, images.
+    given = parse_qs(urlsplit(path).query).get("token", [cookie.value if cookie else ""])[0]
     if headers.get("Host") not in local or not hmac.compare_digest(given, token):
         return False
     return method != "POST" or headers.get("Origin", "").removeprefix("http://") in local
+
+
+def artifact_target(artifact, rel):
+    """The file /a/<task>/<n>/<rel> serves: the artifact or a file beside it. Pure."""
+    base = Path(artifact).parent
+    target = Path(os.path.normpath(base / rel)) if rel else base
+    if not rel or Path(rel).is_absolute() or base not in target.parents:
+        raise ValueError(f"not inside the artifact's folder: {rel!r}")
+    return target
 
 
 def read_args(status):
@@ -197,7 +213,7 @@ def find_task(task_id):
     """(main checkout, task, milestones) as the board shows them now."""
     if not ID_RE.match(task_id):
         raise ValueError(f"not a task id: {task_id!r}")
-    root, tasks, _, milestones, _ = collect()
+    root, tasks, _, milestones, _, _ = collect()
     task = next((t for t in tasks if t.id == task_id), None)
     if task is None:
         raise ValueError(f"no task {task_id}")
@@ -303,10 +319,12 @@ def serve(port):
     }
 
     class Handler(BaseHTTPRequestHandler):
-        def reply(self, code, body, kind):
-            data = body.encode()
+        def reply(self, code, body, kind, cookie=False):
+            data = body if isinstance(body, bytes) else body.encode()
             self.send_response(code)
             self.send_header("Content-Type", kind)
+            if cookie:
+                self.send_header("Set-Cookie", f"board={token}; HttpOnly; SameSite=Strict; Path=/")
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
@@ -317,16 +335,28 @@ def serve(port):
 
         def do_GET(self):
             route = urlsplit(self.path).path
-            if not authorized("GET", self.path, self.headers, token, port) or route not in ("/", "/output"):
+            known = route in ("/", "/output") or route.startswith("/a/")
+            if not authorized("GET", self.path, self.headers, token, port) or not known:
                 return self.reply(404, "not found", "text/plain")
             try:
                 if route == "/output":
                     return self.reply(200, agent_output(self.task()), "text/plain; charset=utf-8")
+                if route.startswith("/a/"):
+                    return self.artifact(route)
                 agents, warnings = live_agents()
-                self.reply(200, build_page(token, agents, warnings)[1], "text/html; charset=utf-8")
+                self.reply(200, build_page(token, agents, warnings)[1], "text/html; charset=utf-8", cookie=True)
             except (subprocess.CalledProcessError, OSError, ValueError, RuntimeError) as err:
                 print(f"GET {route}: {err}", file=sys.stderr)
                 self.reply(500, f"failed: {err}", "text/plain")
+
+        def artifact(self, route):
+            _, _, task_id, n, rel = (unquote(part) for part in route.split("/", 4))
+            entries = collect()[5].get(task_id, [])
+            if not n.isdigit() or int(n) >= len(entries):
+                return self.reply(404, "no such artifact", "text/plain")
+            target = artifact_target(entries[int(n)]["path"], rel)
+            kind = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+            self.reply(200, target.read_bytes(), kind)
 
         def do_POST(self):
             route = urlsplit(self.path).path

@@ -67,6 +67,11 @@ Why the task exists and what it touches.
   first use), or on the task's own branch once it is started; a refused commit
   (pre-commit hook) leaves the file as it was. Nothing is pushed: merge
   `chore/tasks-board` through a PR when you want the edits on `main`.
+- `python3 scripts/tasks.py artifact <path> --label "eval report"` (from a
+  task worktree; `/work-on-task` does it) records a file the session produced.
+  The card links the latest one and **Details** lists them; the live board
+  serves them (and the files beside them, so an HTML report keeps its assets).
+  The list is `.claude/task-artifacts.local.json` in that worktree, gitignored.
 - What the board shows per task: the base branch's file, overridden by the
   board branch `chore/tasks-board` (edits made from the board), by the task's
   own worktree (uncommitted edits included) and by a pushed

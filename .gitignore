@@ -20,6 +20,7 @@ target/
 .claude/worktrees/
 # Local PR-watch allowlist and state (logins identify people)
 .claude/pr-watch*.local.*
+.claude/task-artifacts.local.json
 # Generated task board (scripts/tasks.py html)
 tasks/index.html
 tasks/index.tmp
