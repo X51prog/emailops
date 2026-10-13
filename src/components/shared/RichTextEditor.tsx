@@ -7,6 +7,7 @@
  *   - bullet + ordered lists
  *   - block quote
  *   - links (with prompt-based UI)
+ *   - font family (email-safe stacks) and font size, written as inline styles
  *   - inline images via paste / drag-drop (stored as data: URLs in the
  *     editor; converted to cid: + attachments by `prepareOutgoingHtml`
  *     just before send)
@@ -23,11 +24,12 @@
  * reset its content when `value` changes externally (e.g. AI draft arrived).
  */
 
-import { type Editor, EditorContent, useEditor } from '@tiptap/react';
+import { type Editor, EditorContent, useEditor, useEditorState } from '@tiptap/react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Select } from '@/components/shared/Select';
 import { currentPlatform } from '@/lib/api';
-import { composeEditorExtensions } from '@/lib/composeEditorExtensions';
+import { composeEditorExtensions, styleProperty } from '@/lib/composeEditorExtensions';
 import { formatShortcut } from '@/lib/platform';
 
 export interface RichTextEditorProps {
@@ -132,13 +134,59 @@ export function RichTextEditor({
   );
 }
 
+/**
+ * Fonts every mail client can show, each with fallbacks for a recipient who
+ * lacks it. The label is the font's own name, so it is not translated.
+ */
+const FONTS = [
+  { label: 'Arial', value: 'Arial, Helvetica, sans-serif' },
+  { label: 'Courier New', value: "'Courier New', Courier, monospace" },
+  { label: 'Garamond', value: 'Garamond, serif' },
+  { label: 'Georgia', value: 'Georgia, serif' },
+  { label: 'Tahoma', value: 'Tahoma, sans-serif' },
+  { label: 'Times New Roman', value: "'Times New Roman', Times, serif" },
+  { label: 'Trebuchet MS', value: "'Trebuchet MS', sans-serif" },
+  { label: 'Verdana', value: 'Verdana, sans-serif' },
+];
+
+/** Sizes offered by the picker, in px (the label is the number alone). */
+const FONT_SIZES = ['10', '12', '14', '16', '18', '20', '24', '32'].map((px) => ({ label: px, value: `${px}px` }));
+
+/** The value of `property` at the cursor if the picker offers it, else '' (the default). */
+function offered(style: string | null, property: string, options: { value: string }[]): string {
+  const current = styleProperty(style, property);
+  return options.some((option) => option.value === current) ? (current as string) : '';
+}
+
 interface ToolbarProps {
   editor: Editor;
   disabled: boolean;
 }
 
 function Toolbar({ editor, disabled }: ToolbarProps) {
-  const { t } = useTranslation(['common']);
+  const { t } = useTranslation(['common', 'compose']);
+  // The editor does not re-render on every transaction, so the toolbar
+  // subscribes to the formatting at the cursor (or across the selection) and
+  // every control follows it. A font or size not in the pickers (one a
+  // webmail draft carried) shows as the default.
+  const format = useEditorState({
+    editor,
+    selector: ({ editor }) => {
+      const style = (editor.getAttributes('textStyle').style as string | null) ?? null;
+      return {
+        bold: editor.isActive('bold'),
+        italic: editor.isActive('italic'),
+        underline: editor.isActive('underline'),
+        strike: editor.isActive('strike'),
+        bulletList: editor.isActive('bulletList'),
+        orderedList: editor.isActive('orderedList'),
+        blockquote: editor.isActive('blockquote'),
+        link: editor.isActive('link'),
+        font: offered(style, 'font-family', FONTS),
+        size: offered(style, 'font-size', FONT_SIZES),
+      };
+    },
+  });
   // `window.prompt` is unreliable in the Tauri webview (and ugly in any
   // case), so the Link button toggles an inline popover instead.
   const [linkPopoverOpen, setLinkPopoverOpen] = useState(false);
@@ -194,26 +242,45 @@ function Toolbar({ editor, disabled }: ToolbarProps) {
 
   return (
     <div className="relative flex flex-wrap items-center gap-0.5 px-2 py-1.5 border-b border-gray-200 bg-gray-50 rounded-t-lg">
-      {btn('B', `Bold (${formatShortcut(platform, 'B')})`, editor.isActive('bold'), () =>
+      {btn('B', `Bold (${formatShortcut(platform, 'B')})`, format.bold, () =>
         editor.chain().focus().toggleBold().run(),
       )}
-      {btn('I', `Italic (${formatShortcut(platform, 'I')})`, editor.isActive('italic'), () =>
+      {btn('I', `Italic (${formatShortcut(platform, 'I')})`, format.italic, () =>
         editor.chain().focus().toggleItalic().run(),
       )}
-      {btn('U', `Underline (${formatShortcut(platform, 'U')})`, editor.isActive('underline'), () =>
+      {btn('U', `Underline (${formatShortcut(platform, 'U')})`, format.underline, () =>
         editor.chain().focus().toggleUnderline().run(),
       )}
-      {btn('S', 'Strikethrough', editor.isActive('strike'), () => editor.chain().focus().toggleStrike().run())}
+      {btn('S', 'Strikethrough', format.strike, () => editor.chain().focus().toggleStrike().run())}
       <span className="w-px h-4 bg-gray-300 mx-1" />
-      {btn('• List', 'Bullet list', editor.isActive('bulletList'), () =>
-        editor.chain().focus().toggleBulletList().run(),
-      )}
-      {btn('1. List', 'Numbered list', editor.isActive('orderedList'), () =>
-        editor.chain().focus().toggleOrderedList().run(),
-      )}
-      {btn('❝', 'Quote', editor.isActive('blockquote'), () => editor.chain().focus().toggleBlockquote().run())}
+      {btn('• List', 'Bullet list', format.bulletList, () => editor.chain().focus().toggleBulletList().run())}
+      {btn('1. List', 'Numbered list', format.orderedList, () => editor.chain().focus().toggleOrderedList().run())}
+      {btn('❝', 'Quote', format.blockquote, () => editor.chain().focus().toggleBlockquote().run())}
       <span className="w-px h-4 bg-gray-300 mx-1" />
-      {btn('Link', 'Insert link', editor.isActive('link') || linkPopoverOpen, openLinkPopover)}
+      {btn('Link', 'Insert link', format.link || linkPopoverOpen, openLinkPopover)}
+      <span className="w-px h-4 bg-gray-300 mx-1" />
+      <Select
+        value={format.font}
+        options={[{ value: '', label: t('compose:defaultFont') }, ...FONTS]}
+        onChange={(value) =>
+          value ? editor.chain().focus().setFontFamily(value).run() : editor.chain().focus().unsetFontFamily().run()
+        }
+        ariaLabel={t('compose:font')}
+        disabled={disabled}
+        size="xs"
+        variant="light"
+      />
+      <Select
+        value={format.size}
+        options={[{ value: '', label: t('compose:defaultFontSize') }, ...FONT_SIZES]}
+        onChange={(value) =>
+          value ? editor.chain().focus().setFontSize(value).run() : editor.chain().focus().unsetFontSize().run()
+        }
+        ariaLabel={t('compose:fontSize')}
+        disabled={disabled}
+        size="xs"
+        variant="light"
+      />
 
       {linkPopoverOpen && (
         <div className="absolute top-full left-2 z-20 mt-1 flex items-center gap-1 rounded-lg border border-gray-200 bg-white p-1.5 shadow-lg">
@@ -241,7 +308,7 @@ function Toolbar({ editor, disabled }: ToolbarProps) {
           >
             Apply
           </button>
-          {editor.isActive('link') && (
+          {format.link && (
             <button
               type="button"
               onClick={() => {

@@ -359,3 +359,68 @@ describe('composeEditorExtensions — signature block', () => {
     expect(body.querySelector('[data-emailops-signature] img')?.getAttribute('src')).toBe('data:image/png;base64,AAAA');
   });
 });
+
+describe('composeEditorExtensions — font family', () => {
+  /** Select the whole document, set the font and read the HTML back. */
+  function withFont(html: string, font: string): string {
+    const editor = createEditor(html);
+    editor.chain().selectAll().setFontFamily(font).run();
+    const out = editor.getHTML();
+    editor.destroy();
+    return out;
+  }
+
+  it('wraps the selected text in the chosen font', () => {
+    const span = parse(withFont('<p>Hello</p>', 'Georgia, serif')).querySelector('span');
+    expect(span?.style.fontFamily).toBe('Georgia, serif');
+    expect(span?.textContent).toBe('Hello');
+  });
+
+  it('replaces the font a webmail draft carried and keeps its other styles', () => {
+    const html = '<p><span style="color: red; font-family: Arial">Hello</span></p>';
+    const span = parse(withFont(html, 'Georgia, serif')).querySelector('span');
+    expect(span?.getAttribute('style')?.match(/font-family/g)).toHaveLength(1);
+    expect(span?.style.fontFamily).toBe('Georgia, serif');
+    expect(span?.style.color).toBe('red');
+  });
+
+  it('keeps the chosen font through a round trip', () => {
+    const html = withFont('<p>Hello</p>', "'Times New Roman', Times, serif");
+    expect(roundTrip(html)).toBe(html);
+  });
+
+  it('goes back to the default font', () => {
+    const editor = createEditor('<p><span style="font-family: Georgia, serif">Hello</span></p>');
+    editor.chain().selectAll().unsetFontFamily().run();
+    expect(editor.getHTML()).toBe('<p>Hello</p>');
+    editor.destroy();
+  });
+});
+
+describe('composeEditorExtensions — font size', () => {
+  it('sets the size of the selected text and keeps its font', () => {
+    const editor = createEditor('<p><span style="font-family: Georgia, serif">Hello</span></p>');
+    editor.chain().selectAll().setFontSize('18px').run();
+    const span = parse(editor.getHTML()).querySelector('span');
+    expect(span?.style.fontSize).toBe('18px');
+    expect(span?.style.fontFamily).toBe('Georgia, serif');
+    editor.destroy();
+  });
+
+  it('replaces the size a webmail draft carried', () => {
+    const editor = createEditor('<p><span style="font-size: 10pt; color: red">Hello</span></p>');
+    editor.chain().selectAll().setFontSize('24px').run();
+    const span = parse(editor.getHTML()).querySelector('span');
+    expect(span?.getAttribute('style')?.match(/font-size/g)).toHaveLength(1);
+    expect(span?.style.fontSize).toBe('24px');
+    expect(span?.style.color).toBe('red');
+    editor.destroy();
+  });
+
+  it('goes back to the default size', () => {
+    const editor = createEditor('<p><span style="font-size: 18px">Hello</span></p>');
+    editor.chain().selectAll().unsetFontSize().run();
+    expect(editor.getHTML()).toBe('<p>Hello</p>');
+    editor.destroy();
+  });
+});
