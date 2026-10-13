@@ -32,6 +32,8 @@
   "insertImage": "Insérer une image",
   "insertLink": "Insérer un lien",
   "linkPrompt": "Saisissez l'URL",
+  "font": "Police",
+  "defaultFont": "Police par défaut",
   "showCc": "Ajouter Cc",
   "showBcc": "Ajouter Cci",
   "minimize": "Réduire",

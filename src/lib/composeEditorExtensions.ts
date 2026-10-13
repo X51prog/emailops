@@ -18,7 +18,15 @@ import { Table, TableCell, TableHeader, TableRow, TableView } from '@tiptap/exte
 import { TextStyle } from '@tiptap/extension-text-style';
 import Underline from '@tiptap/extension-underline';
 import { DOMSerializer, type Node as ProseMirrorNode } from '@tiptap/pm/model';
-import { type Attributes, Extension, type Extensions, Mark, mergeAttributes, Node } from '@tiptap/react';
+import {
+  type Attributes,
+  type CommandProps,
+  Extension,
+  type Extensions,
+  Mark,
+  mergeAttributes,
+  Node,
+} from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 
 /** Attributes carried verbatim: parsed from and rendered to the same HTML attribute. */
@@ -260,6 +268,64 @@ const Signature = Node.create({
   },
 });
 
+/** A text style with its `font-family` replaced by `font`, or dropped when `font` is null. */
+function withFontFamily(style: string | null, font: string | null): string | null {
+  const kept = (style ?? '')
+    .split(';')
+    .map((declaration) => declaration.trim())
+    .filter((declaration) => declaration !== '' && !/^font-family\s*:/i.test(declaration));
+  if (font) kept.push(`font-family: ${font}`);
+  return kept.join('; ') || null;
+}
+
+/** The `font-family` of a text style, or null when it has none. */
+export function fontFamilyOf(style: string | null): string | null {
+  const match = /(?:^|;)\s*font-family\s*:\s*([^;]+)/i.exec(style ?? '');
+  return match ? match[1].trim() : null;
+}
+
+/**
+ * The toolbar's font picker. The text-style mark keeps a draft's inline
+ * `style` verbatim, so the font is written into that same string — a second
+ * `fontFamily` attribute would render two `font-family` declarations, and
+ * the draft's own one would win. Each styled run keeps its other declarations.
+ */
+const FontFamily = Extension.create({
+  name: 'fontFamily',
+  addCommands() {
+    const applyFont =
+      (font: string | null) =>
+      ({ tr, state, dispatch }: CommandProps) => {
+        const type = state.schema.marks.textStyle;
+        const { from, to, empty } = tr.selection;
+        if (empty) {
+          const current = type.isInSet(state.storedMarks ?? tr.selection.$from.marks());
+          const style = withFontFamily((current?.attrs.style as string | null) ?? null, font);
+          tr.setStoredMarks(
+            (state.storedMarks ?? tr.selection.$from.marks())
+              .filter((mark) => mark.type !== type)
+              .concat(style ? [type.create({ style })] : []),
+          );
+        } else {
+          tr.doc.nodesBetween(from, to, (node, pos) => {
+            if (!node.isText) return;
+            const start = Math.max(pos, from);
+            const end = Math.min(pos + node.nodeSize, to);
+            const style = withFontFamily((type.isInSet(node.marks)?.attrs.style as string | null) ?? null, font);
+            if (style) tr.addMark(start, end, type.create({ style }));
+            else tr.removeMark(start, end, type);
+          });
+        }
+        if (dispatch) dispatch(tr);
+        return true;
+      };
+    return {
+      setFontFamily: (font: string) => applyFont(font),
+      unsetFontFamily: () => applyFont(null),
+    };
+  },
+});
+
 export const composeEditorExtensions: Extensions = [
   StarterKit.configure({
     // We want StarterKit defaults but explicit about a few things.
@@ -346,6 +412,7 @@ export const composeEditorExtensions: Extensions = [
       return [{ tag: 'span', getAttrs: (element) => (element.hasAttribute('style') ? null : false) }, { tag: 'font' }];
     },
   }),
+  FontFamily,
   inlineTagMark('subscript', 'sub'),
   inlineTagMark('superscript', 'sup'),
   inlineTagMark('small', 'small'),

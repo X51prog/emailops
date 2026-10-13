@@ -32,6 +32,8 @@
   "insertImage": "Bild einfügen",
   "insertLink": "Link einfügen",
   "linkPrompt": "URL eingeben",
+  "font": "Schriftart",
+  "defaultFont": "Standardschrift",
   "showCc": "Cc hinzufügen",
   "showBcc": "Bcc hinzufügen",
   "minimize": "Minimieren",
