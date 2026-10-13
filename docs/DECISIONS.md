@@ -3663,3 +3663,22 @@ which has an advisory with no patched release. i18next-cli emits every CLDR plur
 **Rejected:** Dismissing the advisory as a dev-only risk (it would stay on a deprecated
 tool with no upgrade path). `disablePlurals` (catalogs that use `_one`/`_other` keys
 would then read as missing).
+
+## 2026-10-13 — Roadmap tasks live in the repo; contributor PRs are babysat locally, never auto-merged
+
+**Decision:** Planned work is one Markdown file per task under `tasks/` (frontmatter:
+id, title, status, milestone, pr), the source of truth for status; `ROADMAP.md` stays
+the prose overview. The board (`make tasks-html`) is a static page generated from every
+worktree's task files, refreshed by a Claude Code hook, with no backend; it launches
+work through `claude-cli://` deep links. Open PRs from an allowlist of contributors are
+kept mergeable by the `babysit-prs` skill, repeated with `/loop` on the developer's
+machine: it pushes conflict and CI fixes to the PR branch but never merges.
+**Context:** Conflicts and red CI on contributor PRs piled up until someone looked, and
+the plan was split across `ROADMAP.md`, `docs/IMPLEMENTATION-GAPS.md` and agent memory.
+Several agents work on different tasks in parallel worktrees, so the status has to be
+read from all of them, not only from `main`.
+**Rejected:** GitHub Actions or cloud routines for PR fixing (no embedded models or full
+gates there, and secrets around untrusted PR code); auto-merge when green (merging stays
+a human call); GitHub Issues/Projects as the source (status off the repo, not visible
+to agents in a worktree); a generated index committed to git (every task branch would
+conflict on it); Backlog.md (a new dependency for what one stdlib script does).

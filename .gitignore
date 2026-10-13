@@ -18,6 +18,11 @@ target/
 # Claude Code — share skills, keep personal/local state out of the repo.
 .claude/settings.local.json
 .claude/worktrees/
+# Local PR-watch allowlist and state (logins identify people)
+.claude/pr-watch*.local.*
+# Generated task board (scripts/tasks.py html)
+tasks/index.html
+tasks/index.tmp
 
 # OS
 .DS_Store
