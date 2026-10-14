@@ -7,6 +7,7 @@ import { planListSource } from '@/lib/filterQuery';
 import { normalizeMimeType } from '@/lib/mimeType';
 import { createPendingActionQueue } from '@/lib/pendingActions';
 import { isUnifiedMode, useAccountStore } from '@/stores/accountStore';
+import { useJunkStore } from '@/stores/junkStore';
 import { useLogStore } from '@/stores/logStore';
 import { useToastStore } from '@/stores/toastStore';
 import type { ActiveFilter, DraftAttachment, Email, EmailAttachmentMeta, EmailCategory } from '@/types';
@@ -1239,11 +1240,28 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
       ),
     })),
 
-  markThreadsNotSpam: (threads) =>
-    runThreadAction(threads, 'notSpam', (state, keys) => ({
+  markThreadsNotSpam: async (threads) => {
+    if (threads.length === 0) return;
+    // Gmail keeps a message's id when it leaves Spam, so the junk verdict and
+    // chip cached for it would keep it hidden or faded in the inbox: clear
+    // them for every message that moved. The open conversation moves too, or
+    // its toolbar and banner keep offering an action that already happened.
+    const keys = new Set(threads.map((t) => threadKey(t.accountId, t.threadId)));
+    const { emails, threadEmails, selectedEmail } = useEmailStore.getState();
+    const moved = [...emails, ...threadEmails, ...(selectedEmail ? [selectedEmail] : [])].filter(
+      (e) => keys.has(keyOf(e)) && e.mailbox === 'spam',
+    );
+    const toInbox = (e: Email) => (keys.has(keyOf(e)) && e.mailbox === 'spam' ? { ...e, mailbox: 'inbox' } : e);
+    const { before } = applyOptimistic(threads, 'notSpam', (state) => ({
       ...state,
-      emails: state.emails.map((e) => (keys.has(keyOf(e)) && e.mailbox === 'spam' ? { ...e, mailbox: 'inbox' } : e)),
-    })),
+      emails: state.emails.map(toInbox),
+      threadEmails: state.threadEmails.map(toInbox),
+      selectedEmail: state.selectedEmail ? toInbox(state.selectedEmail) : null,
+    }));
+    const failed = await commitThreadAction(threads, 'notSpam', before);
+    const done = moved.filter((e) => !failed.has(keyOf(e))).map((e) => e.id);
+    if (done.length > 0) useJunkStore.getState().markNotJunkLocally([...new Set(done)]);
+  },
 
   deleteEmail: async (accountId, emailId) => {
     await api.deleteEmail(accountId, emailId);
@@ -1391,7 +1409,12 @@ function applyOptimistic(
   return { keys, before, leaves };
 }
 
-async function commitThreadAction(threads: ThreadRef[], action: ThreadAction, before: EmailStore): Promise<void> {
+/** Returns the conversations that could not be changed (rolled back). */
+async function commitThreadAction(
+  threads: ThreadRef[],
+  action: ThreadAction,
+  before: EmailStore,
+): Promise<ReadonlySet<string>> {
   const keys = new Set(threads.map((t) => threadKey(t.accountId, t.threadId)));
   let failed: ReadonlySet<string>;
   let detail: string;
@@ -1403,12 +1426,13 @@ async function commitThreadAction(threads: ThreadRef[], action: ThreadAction, be
     failed = keys;
     detail = errorText(error);
   }
-  if (failed.size === 0) return;
+  if (failed.size === 0) return failed;
 
   useEmailStore.setState((current) => restoreThreads(current, before, failed));
   const message = i18n.t(`inbox:threadActions.failed.${action}`, { count: failed.size, detail });
   useLogStore.getState().addLog('error', 'sync', message);
   useToastStore.getState().addToast({ message });
+  return failed;
 }
 
 function setPendingRemovals(keys: ReadonlySet<string>, pending: boolean): void {

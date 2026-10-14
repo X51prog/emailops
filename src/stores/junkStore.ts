@@ -24,6 +24,9 @@ interface JunkStore {
   /** Drop the "already fetched" mark so the next load re-asks the backend. */
   invalidate: (emailId: string) => void;
   setFeedback: (accountId: string, emailId: string, isJunk: boolean) => Promise<void>;
+  /** Mirror a "not junk" the backend already recorded (the not-spam thread
+   *  action): clear the verdict and the junk chip without another call. */
+  markNotJunkLocally: (emailIds: string[]) => void;
 }
 
 /** Should this verdict show a badge? A `not_junk` override always wins. */
@@ -115,6 +118,24 @@ export const useJunkStore = create<JunkStore>((set, get) => ({
       const { [emailId]: _dropped, ...loaded } = state.loaded;
       return { loaded };
     });
+  },
+
+  markNotJunkLocally: (emailIds) => {
+    set((state) => {
+      const verdictsByEmail = { ...state.verdictsByEmail };
+      for (const id of emailIds) {
+        const existing = verdictsByEmail[id];
+        if (existing) verdictsByEmail[id] = { ...existing, userOverride: 'not_junk' };
+      }
+      return { verdictsByEmail };
+    });
+    const tags = useTagStore.getState();
+    for (const id of emailIds) {
+      tags.setEmailTags(
+        id,
+        (tags.tagsByEmail[id] ?? []).filter((t) => t.tagType !== 'junk'),
+      );
+    }
   },
 
   setFeedback: async (accountId: string, emailId: string, isJunk: boolean) => {
