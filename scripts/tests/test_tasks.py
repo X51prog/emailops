@@ -16,6 +16,7 @@ from tasks import (  # noqa: E402
     edit_location,
     excerpt,
     merge,
+    milestone_key,
     new_task_text,
     next_id,
     needs_you,
@@ -35,8 +36,8 @@ def task_text(id="T-0001", title="A task", status="todo", milestone="0.7.0", pr=
     return f"---\nid: {id}\ntitle: {title}\nstatus: {status}\nmilestone: {milestone}\npr: {pr}\n---\n\n{body}"
 
 
-def task(id="T-0001", status="todo", pr=None, title="A task", body="Body.\n", worktree="main"):
-    return Task(id=id, title=title, status=status, milestone="0.7.0", pr=pr, body=body, file=f"{id}-a-task.md", worktree=worktree)
+def task(id="T-0001", status="todo", pr=None, title="A task", body="Body.\n", worktree="main", milestone="0.7.0"):
+    return Task(id=id, title=title, status=status, milestone=milestone, pr=pr, body=body, file=f"{id}-a-task.md", worktree=worktree)
 
 
 # --- parse_task -----------------------------------------------------------
@@ -528,3 +529,18 @@ def test_new_task_title_must_be_one_short_line():
     for bad in ("", "  ", "a\nb", "x" * 121):
         with pytest.raises(ValueError):
             new_task_text("T-0013", bad, "0.7.0", "")
+
+
+# --- milestone order ----------------------------------------------------------
+
+
+def test_milestones_sort_by_version_then_named_ones_last():
+    names = ["later", "0.10.0", "0.7.0", "1.0", "0.7.1", "backlog"]
+    assert sorted(names, key=milestone_key) == ["0.7.0", "0.7.1", "0.10.0", "1.0", "backlog", "later"]
+
+
+def test_column_lists_tasks_from_the_lowest_milestone_up():
+    tasks = [task("T-0001", milestone="later"), task("T-0002", milestone="0.10.0"), task("T-0003", milestone="0.7.0"), task("T-0004", milestone="0.7.0")]
+    html = render(tasks)
+    order = sorted(["T-0001", "T-0002", "T-0003", "T-0004"], key=lambda i: html.index(f'id="{i}"'))
+    assert order == ["T-0003", "T-0004", "T-0002", "T-0001"]

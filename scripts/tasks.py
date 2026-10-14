@@ -295,6 +295,13 @@ def excerpt(body):
     return " ".join(lines)
 
 
+def milestone_key(name):
+    """Sort key: versions (0.7.0 < 0.10.0) in numeric order, then named milestones (later). Pure."""
+    if re.fullmatch(r"\d+(?:\.\d+)*", name):
+        return (0, tuple(int(n) for n in name.split(".")), "")
+    return (1, (), name)
+
+
 def validate(tasks, milestones=None):
     """Errors for one checkout's tasks; milestones, when given, is the allowed list. Pure."""
     errors = []
@@ -394,7 +401,7 @@ def render_html(tasks, worktrees, repo, generated, warnings=(), token=None, mile
     columns = []
     for status in STATUSES:
         cards = []
-        for t in (t for t in tasks if t.status == status):
+        for t in sorted((t for t in tasks if t.status == status), key=lambda t: (milestone_key(t.milestone), t.id)):
             wt = worktrees.get(t.worktree)
             if token:
                 choices = "".join(f'<option value="{e(m)}"{" selected" if m == t.milestone else ""}>{e(m)}</option>' for m in milestones)

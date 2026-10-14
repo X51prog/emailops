@@ -30,7 +30,9 @@ Why the task exists and what it touches.
 
 - `status`: `todo` → `doing` → `review` → `done`, or `dropped`.
 - `review` and `done` need `pr` (the PR number).
-- `milestone`: one of the names listed in `tasks/milestones.md`.
+- `milestone`: one of the names listed in `tasks/milestones.md`. The board lists each
+  column from the lowest version up (`0.7.0` before `0.10.0`), named
+  milestones such as `later` last.
 - `issue` (optional): the GitHub issue the task comes from; the board links it.
 - Done tasks are removed by the release (`tasks.py prune-done`, release
   skill Phase 3c): git history keeps them.
