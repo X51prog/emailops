@@ -1,0 +1,27 @@
+{
+  "rust": {
+    "src-tauri/src/db/emails/crud.rs::the_unread_inbox_lists_threads_with_any_unread_message": "Con «No leídos», la bandeja lista los hilos que tienen algún mensaje sin leer y no borrado, aunque el último ya esté leído; la fila sigue siendo el último mensaje.",
+    "src-tauri/src/db/emails/crud.rs::the_unread_inbox_count_matches_the_unread_list": "En la vista de todas las cuentas, el contador de «No leídos» coincide con la lista, también cuando dos cuentas comparten el mismo id de hilo.",
+    "src-tauri/src/db/emails/crud.rs::a_flat_view_lists_only_its_own_unread_messages": "En una vista plana (Archivados, Enviados, carpetas) «No leídos» lista solo los mensajes que están sin leer, con su contador.",
+    "src-tauri/src/db/emails/crud.rs::the_unread_snoozed_view_counts_what_it_lists": "En Pospuestos, «No leídos» lista y cuenta los mismos hilos: los que tienen algún mensaje sin leer.",
+    "src-tauri/src/db/emails/crud.rs::the_unread_check_seeks_the_thread": "La comprobación de «sin leer» de cada fila busca su hilo por índice en lugar de recorrer el correo sin leer de toda la cuenta.",
+    "src-tauri/src/db/emails/mailbox_state.rs::unread_threads_are_the_threads_with_any_live_unread_message": "Un hilo cuenta como no leído si alguno de sus mensajes no borrados lo está, y solo dentro de su propia cuenta.",
+    "src-tauri/src/db/emails/mailbox_state.rs::unread_threads_seeks_each_thread_instead_of_walking_the_account": "La consulta de hilos no leídos busca cada hilo por índice en lugar de recorrer la cuenta entera.",
+    "src-tauri/src/db/emails/search.rs::an_unread_filter_lists_threads_with_any_unread_message": "Un filtro del sidebar con «No leídos» incluye un hilo si cualquier mensaje está sin leer, aunque el que coincide con el filtro ya esté leído.",
+    "src-tauri/src/db/emails/search.rs::an_unread_tag_filter_lists_threads_with_any_unread_message": "Un filtro por etiqueta con «No leídos» deja fuera los hilos ya leídos del todo.",
+    "src-tauri/src/services/emails/mod.rs::an_inbox_conversation_is_unread_when_any_message_is": "Una conversación de la bandeja se muestra como no leída si cualquiera de sus mensajes lo está, con o sin el filtro activo."
+  },
+  "vitest": {
+    "src/stores/emailStore.unreadOnly.test.ts::asks the mailbox list and its count for unread rows only": "Con «No leídos» activo, la lista de una vista y su contador piden al backend solo filas sin leer.",
+    "src/stores/emailStore.unreadOnly.test.ts::asks the next page for unread rows only": "Al cargar más con «No leídos» activo, la página siguiente también pide solo filas sin leer.",
+    "src/stores/emailStore.unreadOnly.test.ts::narrows a sidebar filter to unread conversations": "Un filtro del sidebar con «No leídos» activo se limita a conversaciones sin leer.",
+    "src/stores/emailStore.unreadOnly.test.ts::survives a reset for another account": "El estado del toggle se mantiene al cambiar de cuenta.",
+    "src/stores/emailStore.unreadOnly.test.ts::keeps a conversation marked read on screen until the list reloads": "Marcar como leída una conversación con «No leídos» activo no la quita de la lista hasta que esta se recarga.",
+    "src/hooks/useEmails.test.tsx::reloads the list when the Unread toggle changes": "Cambiar el toggle Todos / No leídos recarga la lista.",
+    "src/components/Inbox/Inbox.unreadToggle.test.tsx::starts on All": "El toggle de la cabecera empieza en «Todos».",
+    "src/components/Inbox/Inbox.unreadToggle.test.tsx::turns the unread filter on and off": "Pulsar «No leídos» y «Todos» activa y desactiva el filtro.",
+    "src/components/Inbox/Inbox.unreadToggle.test.tsx::stays available on a sidebar filter": "El toggle sigue visible cuando hay un filtro del sidebar activo.",
+    "src/components/Inbox/Inbox.unreadToggle.test.tsx::is hidden while a free-text search is active": "El toggle se oculta durante una búsqueda de texto libre, que ya admite «is:unread».",
+    "src/components/Inbox/Inbox.unreadToggle.test.tsx::says there is nothing unread when the unread list is empty": "Con «No leídos» activo y la lista vacía, la lista dice que no hay correos sin leer."
+  }
+}
