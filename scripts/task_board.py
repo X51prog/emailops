@@ -132,6 +132,18 @@ def terminal_of(procs):
     return None
 
 
+def raise_command(app):
+    """The command that brings the terminal app to the front. Pure.
+
+    `open -a` activates cmux on the current Space, so a full-screen cmux window
+    stays hidden behind the desktop; cmux's own `focus` switches to its Space.
+    """
+    if Path(app).stem == "cmux":
+        script = f'tell application "{app}" to focus (focused terminal of selected tab of front window)'
+        return ["osascript", "-e", script]
+    return ["open", "-a", app]
+
+
 # --- I/O ------------------------------------------------------------------
 
 
@@ -191,7 +203,7 @@ def raise_terminal():
         procs[int(pid)] = (int(ppid), command)
     app = terminal_of(procs)
     if app:
-        subprocess.run(["open", "-a", app], check=True)
+        subprocess.run(raise_command(app), check=True)
 
 
 def focus(task_id):

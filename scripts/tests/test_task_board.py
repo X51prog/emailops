@@ -9,6 +9,7 @@ from task_board import (  # noqa: E402
     artifact_target,
     authorized,
     pick_workspace,
+    raise_command,
     read_args,
     task_worktree,
     terminal_of,
@@ -119,6 +120,17 @@ def test_terminal_of_walks_up_from_the_herdr_client_to_its_app():
 
 def test_terminal_of_without_herdr_is_none():
     assert terminal_of({1: (0, "/sbin/launchd")}) is None
+
+
+def test_cmux_is_raised_through_its_own_focus_command():
+    # open -a activates cmux but stays on the current Space, so a full-screen window never shows.
+    argv = raise_command("/Applications/cmux.app")
+    assert argv[0] == "osascript"
+    assert 'tell application "/Applications/cmux.app" to focus' in argv[-1]
+
+
+def test_other_terminals_are_raised_with_open():
+    assert raise_command("/Applications/Ghostty.app") == ["open", "-a", "/Applications/Ghostty.app"]
 
 
 # --- read_args --------------------------------------------------------------
