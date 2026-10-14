@@ -63,4 +63,23 @@ describe('useEmails', () => {
 
     expect(container.querySelector('[data-testid="count"]')?.textContent).toBe('0');
   });
+
+  it('reloads the list when the Unread toggle changes', async () => {
+    const { getEmails } = await import('@/lib/api');
+    useAccountStore.setState({
+      accounts: [{ id: 'acc-1', provider: 'gmail', email: 'work@example.com', enabled: true } as never],
+      activeAccountId: 'acc-1',
+    });
+    await act(async () => {
+      root.render(<Harness />);
+    });
+    vi.mocked(getEmails).mockClear();
+
+    await act(async () => {
+      useEmailStore.getState().setUnreadOnly(true);
+    });
+
+    expect(getEmails).toHaveBeenCalledWith('acc-1', 50, 0, 'inbox', true);
+    useEmailStore.getState().setUnreadOnly(false);
+  });
 });

@@ -31,6 +31,7 @@ pub async fn dispatch(session: &mut CliSession, command: Command) -> Result<()> 
                 offset,
                 mailbox.as_deref(),
                 category.as_deref(),
+                false,
             )?;
             output::render_emails(&emails, session.style)
         }

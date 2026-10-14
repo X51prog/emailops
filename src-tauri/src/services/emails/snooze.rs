@@ -259,7 +259,15 @@ mod tests {
             "the latest message is unread again"
         );
         let inbox: Vec<String> = db
-            .get_emails(crate::db::AccountScope::Account("acc-1"), 50, 0, None, None, None)
+            .get_emails(
+                crate::db::AccountScope::Account("acc-1"),
+                50,
+                0,
+                None,
+                None,
+                None,
+                false,
+            )
             .unwrap()
             .into_iter()
             .map(|e| e.id)
@@ -278,7 +286,15 @@ mod tests {
         snooze_threads(&db, &[thread("t-1")], NOW + 600, NOW).unwrap();
         assert!(wake_due_snoozes(&db, NOW, None).await.unwrap().is_empty());
         assert!(db
-            .get_emails(crate::db::AccountScope::Account("acc-1"), 50, 0, None, None, None)
+            .get_emails(
+                crate::db::AccountScope::Account("acc-1"),
+                50,
+                0,
+                None,
+                None,
+                None,
+                false
+            )
             .unwrap()
             .is_empty());
     }

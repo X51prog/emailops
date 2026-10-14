@@ -537,6 +537,8 @@ export interface EmailWindow {
    *  a filter applied from a view lists that view's mail. Absent = every
    *  live mailbox. */
   mailbox?: string;
+  /** Only conversations with an unread message (the list's Unread toggle). */
+  unreadOnly?: boolean;
 }
 
 export interface ClassificationConfig {

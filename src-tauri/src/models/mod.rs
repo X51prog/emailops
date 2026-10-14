@@ -1747,6 +1747,9 @@ pub struct EmailWindow {
     /// `folder:<path>`): a filter applied from a view lists that view's mail.
     /// Absent means every live mailbox.
     pub mailbox: Option<String>,
+    /// Only conversations with a live unread message — the list's Unread
+    /// toggle, thread-level like the inbox's.
+    pub unread_only: bool,
 }
 
 impl EmailWindow {
@@ -1785,6 +1788,15 @@ impl EmailWindow {
             parts.push(format!("{alias}.mailbox = ?{next_index}"));
             *next_index += 1;
             binds.push(Box::new(mailbox.to_string()));
+        }
+        // Same thread seek, and the same index hint, as the inbox's unread
+        // check (`mailbox_scope_sql`).
+        if self.unread_only {
+            parts.push(format!(
+                "EXISTS (SELECT 1 FROM emails u INDEXED BY idx_emails_thread_latest \
+                 WHERE u.account_id = {alias}.account_id AND u.thread_id = {alias}.thread_id \
+                 AND u.is_read = 0 AND u.is_deleted = 0)"
+            ));
         }
 
         let sql = if parts.is_empty() {

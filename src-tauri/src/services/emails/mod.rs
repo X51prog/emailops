@@ -54,12 +54,13 @@ pub use sync::{
     sync_account, sync_account_with_contention, sync_account_with_provider, SyncContention,
 };
 pub use thread_actions::{
-    apply_thread_action, apply_to_account, plan_thread_action, widen_stars_to_threads, ProviderAccess, ThreadAction,
-    ThreadActionFailure, ThreadActionReport, ThreadRef,
+    apply_thread_action, apply_to_account, plan_thread_action, widen_stars_to_threads, widen_unread_to_threads,
+    ProviderAccess, ThreadAction, ThreadActionFailure, ThreadActionReport, ThreadRef,
 };
 
 /// List emails for one account, or — when `account_id` is `None` — merged
 /// across all enabled accounts (the unified "All accounts" inbox).
+/// `unread_only` keeps the unread rows (see `mailbox_scope_sql`).
 pub fn get_emails(
     db: &Arc<Database>,
     account_id: Option<&str>,
@@ -67,15 +68,20 @@ pub fn get_emails(
     offset: i32,
     mailbox: Option<&str>,
     category: Option<&str>,
+    unread_only: bool,
 ) -> Result<Vec<Email>> {
     let scope = match account_id {
         Some(id) => crate::db::AccountScope::Account(id),
         None => crate::db::AccountScope::AllEnabled,
     };
-    let mut emails = db.get_emails(scope, limit, offset, None, mailbox, category)?;
+    let mut emails = db.get_emails(scope, limit, offset, None, mailbox, category, unread_only)?;
     // The inbox lists one row per conversation: its star is the thread's.
     if matches!(mailbox, None | Some("inbox")) {
         widen_stars_to_threads(db, &mut emails)?;
+    }
+    // So is its read state, in both thread views, matching the unread filter.
+    if matches!(mailbox, None | Some("inbox") | Some("snoozed")) {
+        widen_unread_to_threads(db, &mut emails)?;
     }
     Ok(emails)
 }
@@ -270,10 +276,32 @@ mod list_tests {
             .unwrap();
         let db = Arc::new(db);
 
-        let listed = get_emails(&db, Some("acc-1"), 50, 0, None, None).unwrap();
+        let listed = get_emails(&db, Some("acc-1"), 50, 0, None, None, false).unwrap();
 
         assert_eq!(listed.len(), 1, "{listed:?}");
         assert_eq!(listed[0].id, "new");
         assert!(listed[0].is_starred, "the thread's star");
+    }
+
+    #[test]
+    fn an_inbox_conversation_is_unread_when_any_message_is() {
+        let db = Database::new_for_testing().unwrap();
+        db.seed_test_account("acc-1");
+        let mut newer_read = inbox_message("new", 200, false);
+        newer_read.is_read = true;
+        db.insert_emails_batch(&[inbox_message("old", 100, false), newer_read])
+            .unwrap();
+        let db = Arc::new(db);
+
+        for unread_only in [false, true] {
+            let listed = get_emails(&db, Some("acc-1"), 50, 0, None, None, unread_only).unwrap();
+
+            assert_eq!(listed.len(), 1, "{listed:?}");
+            assert_eq!(listed[0].id, "new");
+            assert!(
+                !listed[0].is_read,
+                "the thread's read state (unread_only={unread_only})"
+            );
+        }
     }
 }

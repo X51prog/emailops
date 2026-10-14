@@ -4637,6 +4637,7 @@ mod spam_reconcile_tests {
             None,
             Some(mailbox),
             None,
+            false,
         )
         .expect("list")
         .into_iter()

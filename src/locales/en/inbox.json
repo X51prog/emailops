@@ -18,6 +18,12 @@
   "categoriesAria": "Email categories",
   "allCategories": "All",
   "searchAllCategories": "Search covers every category",
+  "readFilter": {
+    "aria": "Show all or only unread emails",
+    "all": "All",
+    "unread": "Unread",
+    "empty": "No unread emails"
+  },
   "noEmailSelected": "No email selected",
   "selectEmailHint": "Select an email from the list to view it here.",
   "categoryFilter": {

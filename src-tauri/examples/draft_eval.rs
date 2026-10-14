@@ -318,6 +318,7 @@ fn sample_reply_pairs(
             None,
             Some("sent"),
             None,
+            false,
         )?;
         if batch.is_empty() {
             break;

@@ -282,14 +282,16 @@ export interface Folder {
 }
 
 /** `accountId: null` selects the unified ("All accounts") view — emails
- *  merged across every enabled account. */
+ *  merged across every enabled account. `unreadOnly` lists only unread rows
+ *  (in a thread view, conversations with any unread message). */
 export async function getEmails(
   accountId: string | null,
   limit?: number,
   offset?: number,
   mailbox?: MailboxView,
+  unreadOnly?: boolean,
 ): Promise<Email[]> {
-  return invoke('get_emails', { accountId, limit, offset, mailbox });
+  return invoke('get_emails', { accountId, limit, offset, mailbox, unreadOnly });
 }
 
 /** Custom folders of one account, sorted by display name. Empty for
@@ -716,12 +718,16 @@ export async function redownloadEmail(accountId: string, emailId: string): Promi
 }
 
 /**
- * `accountId: null` counts across every enabled account. `mailbox` must match
- * the one passed to `getEmails` — the store compares list length against this
- * count to decide whether more pages remain.
+ * `accountId: null` counts across every enabled account. `mailbox` and
+ * `unreadOnly` must match the ones passed to `getEmails` — the store compares
+ * list length against this count to decide whether more pages remain.
  */
-export async function getEmailCount(accountId: string | null, mailbox?: MailboxView): Promise<number> {
-  return invoke('get_email_count', { accountId, mailbox });
+export async function getEmailCount(
+  accountId: string | null,
+  mailbox?: MailboxView,
+  unreadOnly?: boolean,
+): Promise<number> {
+  return invoke('get_email_count', { accountId, mailbox, unreadOnly });
 }
 
 // Sync commands

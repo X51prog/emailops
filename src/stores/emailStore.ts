@@ -523,6 +523,12 @@ interface EmailStore {
   /** What the list on screen shows, recorded by `fetchEmails` — decides
    *  whether a thread action takes rows out of it. */
   listScope: ListScope;
+  /** The list header's Unread toggle: every list path asks the backend for
+   *  unread rows only. Session state — it survives view and account switches
+   *  (`reset` leaves it alone) and starts off at launch. Marking a row read
+   *  does not take it out of the list; the next fetch does. */
+  unreadOnly: boolean;
+  setUnreadOnly: (on: boolean) => void;
   /**
    * Thread actions, for one conversation or many (bulk selection). Each
    * updates the UI optimistically, sends the change to the account, and rolls
@@ -634,10 +640,13 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
   pendingChatDraft: null,
   resetAccountKey: null,
   listScope: 'inbox',
+  unreadOnly: false,
   pendingRemovals: new Set<string>(),
   snoozes: new Map<string, ThreadSnooze>(),
 
   setPendingChatDraft: (draft) => set({ pendingChatDraft: draft }),
+
+  setUnreadOnly: (on) => set({ unreadOnly: on }),
   consumePendingChatDraft: () => set({ pendingChatDraft: null }),
 
   openTab: async (email, focusId) => {
@@ -787,7 +796,7 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
     }
     // Increment fetch ID to track this operation and cancel stale ones
     const fetchId = get().currentFetchId + 1;
-    const { searchQuery } = get();
+    const { searchQuery, unreadOnly } = get();
     const source = planListSource(searchQuery, mailbox ?? 'inbox');
 
     // Silent mode: background refresh after sync — never show loading or clear the list.
@@ -828,7 +837,7 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
           limit,
           0,
           source.filter.type === 'attachment_ext' ? source.filter.value : undefined,
-          { mailbox: source.mailbox },
+          { mailbox: source.mailbox, unreadOnly },
         );
         emails = withThreadActivity(result.emails, result.threadLatestAt);
         totalCount = result.totalCount;
@@ -839,10 +848,10 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
         totalCount = result.emails.length;
       } else {
         [emails, totalCount] = await Promise.all([
-          api.getEmails(accountId, limit, 0, mailbox),
-          // Same mailbox as the list — counting the inbox while listing Sent
-          // made hasMore compare two different sets.
-          api.getEmailCount(accountId, mailbox),
+          api.getEmails(accountId, limit, 0, mailbox, unreadOnly),
+          // Same mailbox and read filter as the list — counting the inbox
+          // while listing Sent made hasMore compare two different sets.
+          api.getEmailCount(accountId, mailbox, unreadOnly),
         ]);
       }
 
@@ -870,8 +879,17 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
   },
 
   loadMoreEmails: async (accountId, _filter, _selectedCategories, mailbox) => {
-    const { isLoadingMore, hasMore, emails, totalCount, loadMoreLock, loadMoreFailed, currentFetchId, searchQuery } =
-      get();
+    const {
+      isLoadingMore,
+      hasMore,
+      emails,
+      totalCount,
+      loadMoreLock,
+      loadMoreFailed,
+      currentFetchId,
+      searchQuery,
+      unreadOnly,
+    } = get();
 
     // A search returns all its results at once; a one-filter query pages.
     const source = planListSource(searchQuery, mailbox ?? 'inbox');
@@ -897,11 +915,11 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
           PAGE_SIZE,
           offset,
           source.filter.type === 'attachment_ext' ? source.filter.value : undefined,
-          { mailbox: source.mailbox },
+          { mailbox: source.mailbox, unreadOnly },
         );
         moreEmails = withThreadActivity(result.emails, result.threadLatestAt);
       } else {
-        moreEmails = await api.getEmails(accountId, PAGE_SIZE, offset, mailbox);
+        moreEmails = await api.getEmails(accountId, PAGE_SIZE, offset, mailbox, unreadOnly);
       }
 
       // Check if fetch ID changed (account switched during load)

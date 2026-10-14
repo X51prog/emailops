@@ -187,7 +187,7 @@ mod tests {
     const NOW: i64 = 1_700_000_000;
 
     fn listed_threads(db: &Database, view: Option<&str>) -> Vec<String> {
-        db.get_emails(AccountScope::Account("acc1"), 50, 0, None, view, None)
+        db.get_emails(AccountScope::Account("acc1"), 50, 0, None, view, None, false)
             .unwrap()
             .into_iter()
             .map(|e| e.thread_id)
@@ -261,8 +261,8 @@ mod tests {
         insert_email(&db, "b", "acc1", "t-b", NOW - 20);
         snooze(&db, "t-a", NOW + 3600);
         assert_eq!(listed_threads(&db, None), vec!["t-b".to_string()]);
-        assert_eq!(db.count_emails(AccountScope::Account("acc1"), None).unwrap(), 1);
-        assert_eq!(db.count_emails(AccountScope::AllEnabled, None).unwrap(), 1);
+        assert_eq!(db.count_emails(AccountScope::Account("acc1"), None, false).unwrap(), 1);
+        assert_eq!(db.count_emails(AccountScope::AllEnabled, None, false).unwrap(), 1);
     }
 
     #[test]
@@ -275,19 +275,21 @@ mod tests {
         snooze(&db, "t-a", NOW + 7200);
         snooze(&db, "t-b", NOW + 3600);
         let listed = db
-            .get_emails(AccountScope::Account("acc1"), 50, 0, None, Some("snoozed"), None)
+            .get_emails(AccountScope::Account("acc1"), 50, 0, None, Some("snoozed"), None, false)
             .unwrap();
         let ids: Vec<&str> = listed.iter().map(|e| e.id.as_str()).collect();
         assert_eq!(ids, vec!["b", "a2"], "one row per thread, its latest message");
         assert_eq!(
-            db.count_emails(AccountScope::Account("acc1"), Some("snoozed")).unwrap(),
+            db.count_emails(AccountScope::Account("acc1"), Some("snoozed"), false)
+                .unwrap(),
             2
         );
         // A woken thread is no longer in the Snoozed view.
         db.mark_snoozes_woken(&[("acc1", "t-b")], NOW + 3600).unwrap();
         assert_eq!(listed_threads(&db, Some("snoozed")), vec!["t-a".to_string()]);
         assert_eq!(
-            db.count_emails(AccountScope::Account("acc1"), Some("snoozed")).unwrap(),
+            db.count_emails(AccountScope::Account("acc1"), Some("snoozed"), false)
+                .unwrap(),
             1
         );
     }
@@ -305,14 +307,14 @@ mod tests {
             vec!["t-old".to_string(), "t-new".to_string(), "t-mid".to_string()]
         );
         // Listed once, counted once, and its real date is unchanged.
-        assert_eq!(db.count_emails(AccountScope::Account("acc1"), None).unwrap(), 3);
+        assert_eq!(db.count_emails(AccountScope::Account("acc1"), None, false).unwrap(), 3);
         let rows = db
-            .get_emails(AccountScope::Account("acc1"), 50, 0, None, None, None)
+            .get_emails(AccountScope::Account("acc1"), 50, 0, None, None, None, false)
             .unwrap();
         assert_eq!(rows[0].timestamp, NOW - 30 * 86_400);
         // Paging keeps the merged order.
         let page2: Vec<String> = db
-            .get_emails(AccountScope::Account("acc1"), 2, 2, None, None, None)
+            .get_emails(AccountScope::Account("acc1"), 2, 2, None, None, None, false)
             .unwrap()
             .into_iter()
             .map(|e| e.thread_id)
@@ -344,7 +346,7 @@ mod tests {
         snooze(&db, "t-s", NOW - 1);
         db.mark_snoozes_woken(&[("acc1", "t-s")], NOW).unwrap();
         let primary: Vec<String> = db
-            .get_emails(AccountScope::Account("acc1"), 50, 0, None, None, Some("primary"))
+            .get_emails(AccountScope::Account("acc1"), 50, 0, None, None, Some("primary"), false)
             .unwrap()
             .into_iter()
             .map(|e| e.id)
@@ -356,7 +358,7 @@ mod tests {
     fn the_inbox_query_is_still_driven_by_an_index() {
         let db = Database::new_for_testing().unwrap();
         for scope in [AccountScope::Account("acc1"), AccountScope::AllEnabled] {
-            let plan = db.explain_get_emails(scope, 50, 0, None);
+            let plan = db.explain_get_emails(scope, 50, 0, None, false);
             assert!(
                 plan.iter()
                     .all(|step| !step.starts_with("SCAN e") || step.contains("INDEX")),

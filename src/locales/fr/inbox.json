@@ -18,6 +18,12 @@
   "categoriesAria": "Catégories de courriels",
   "allCategories": "Tous",
   "searchAllCategories": "La recherche couvre toutes les catégories",
+  "readFilter": {
+    "aria": "Afficher tous les e-mails ou seulement les non lus",
+    "all": "Tous",
+    "unread": "Non lus",
+    "empty": "Aucun e-mail non lu"
+  },
   "noEmailSelected": "Aucun courriel sélectionné",
   "selectEmailHint": "Sélectionnez un courriel dans la liste pour l'afficher ici.",
   "categoryFilter": {

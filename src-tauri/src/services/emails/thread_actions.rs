@@ -471,6 +471,26 @@ pub fn widen_stars_to_threads(db: &Database, emails: &mut [Email]) -> Result<()>
     Ok(())
 }
 
+/// Widen each row's unread state to its thread's, like
+/// [`widen_stars_to_threads`]: a conversation is unread when any message is.
+pub fn widen_unread_to_threads(db: &Database, emails: &mut [Email]) -> Result<()> {
+    let keys: Vec<(&str, &str)> = emails
+        .iter()
+        .filter(|e| e.is_read)
+        .map(|e| (e.account_id.as_str(), e.thread_id.as_str()))
+        .collect();
+    if keys.is_empty() {
+        return Ok(());
+    }
+    let unread = db.unread_threads(&keys)?;
+    for email in emails.iter_mut() {
+        if unread.contains(&(email.account_id.clone(), email.thread_id.clone())) {
+            email.is_read = false;
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -743,6 +763,7 @@ mod tests {
                 None,
                 Some("inbox"),
                 None,
+                false,
             )
             .unwrap();
         assert!(inbox.is_empty(), "the thread left the inbox");
