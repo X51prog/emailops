@@ -3689,3 +3689,24 @@ conflict on it); Backlog.md (a new dependency for what one stdlib script does); 
 page with no backend (it cannot edit tasks or start agents, and a `file://` page cannot
 fetch live state); writing board edits straight to `main` or pushing them (every click
 would be a push).
+
+## 2026-10-14 — "Not spam" moves the message back to the inbox at the provider
+
+**Decision:** A conversation filed in Spam offers "Not spam" in the thread toolbar, and
+"Not junk" on the junk banner does the same when the message is in Spam: every Spam
+message of the conversation moves back to the inbox at the provider (Gmail drops `SPAM`
+and adds `INBOX`, Outlook moves to `inbox`, IMAP `UID MOVE`), then the row is re-filed
+under its new id and a sticky `not_junk` override is recorded so the detector never
+re-flags it. It is a `ThreadAction` (`NotSpam`), provider-first like archive: a refused
+move leaves the conversation in Spam and the UI rolls back with a toast.
+**Context:** There was no way to take mail out of Spam from the app. "Not junk" only
+cleared the local junk tag, and the banner only showed for mail the local detector had
+flagged, so mail the server filed in Spam offered no action at all. The 2026-07-28
+local-flag-only rule is about the detector never moving mail on its own; a move the
+user asks for is the opposite, and "Confirm junk" and blocking a sender already move
+mail into Spam on request. The generic move picker still excludes Spam (2026-07-23
+folder-management entry); this dedicated action is the way out of it.
+**Rejected:** Keeping "Not junk" local-only — the message stays hidden in Spam in every
+client. Adding Spam to the generic move picker — it would not record the not-junk
+correction and would offer Spam as a destination without the junk feedback that
+"Confirm junk" records.

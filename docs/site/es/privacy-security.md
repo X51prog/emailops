@@ -91,6 +91,7 @@ que ves en todas partes:
 | Marcar un mensaje como leído o no leído | El mismo mensaje se marca como leído en la cuenta |
 | Eliminar un mensaje | El mensaje se mueve a la **Papelera** de la cuenta (Elementos eliminados en Outlook), donde se puede recuperar hasta que el proveedor la vacíe: 30 días en Gmail |
 | Mover un mensaje a otra carpeta, o **Confirmar basura** | El mensaje también se mueve en la cuenta — Confirmar basura lo archiva en la carpeta de correo no deseado del proveedor |
+| **No es spam — mover a Recibidos**, o **No es basura** en un mensaje de **Spam** | El mensaje vuelve a la bandeja de entrada de la cuenta |
 | Crear, renombrar o eliminar una carpeta | La carpeta también cambia en la cuenta |
 | Guardar un borrador | El borrador se guarda en los Borradores de la cuenta |
 

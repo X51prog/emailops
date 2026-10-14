@@ -292,8 +292,9 @@ over time. You decide what happens to flagged mail:
   provider's own folders. <!-- claim:feat-junk-bulk-3 -->
 
 <!-- claim:feat-junk-bulk-4 -->
-Neither option moves or deletes anything on the server; only an explicit **Confirm junk**
-or **Block sender** does. An optional impersonation/phishing warning is available and off by default.
+Neither option moves or deletes anything on the server; only an explicit **Confirm junk**,
+**Block sender** or **Not junk** on a message in **Spam** does — the last one moves the
+conversation back to the inbox. An optional impersonation/phishing warning is available and off by default.
 
 ## Unsubscribe and block sender {#unsubscribe-and-block-sender}
 

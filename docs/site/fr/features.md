@@ -319,7 +319,8 @@ non désiré. Aucun modèle ni appel réseau n'intervient, et vos corrections (�
 
 <!-- claim:feat-junk-bulk-4 -->
 Aucune des deux options ne déplace ni ne supprime quoi que ce soit sur le serveur ; seul un
-**Confirmer** ou un **Bloquer l'expéditeur** explicite le fait. Un avertissement d'usurpation d'identité /
+**Confirmer**, un **Bloquer l'expéditeur** ou un **Pas indésirable** explicite sur un message
+des **Indésirables** le fait — ce dernier remet la conversation dans la boîte de réception. Un avertissement d'usurpation d'identité /
 hameçonnage est proposé en option, désactivé par défaut.
 
 ## Se désabonner et bloquer un expéditeur {#unsubscribe-and-block-sender}
