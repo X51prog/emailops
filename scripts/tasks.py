@@ -62,7 +62,7 @@ MAX_ARTIFACTS = 20
 NEEDS_YOU = ("blocked", "done")  # Herdr states where the agent waits for the user
 ACTIVE_MINUTES = 10  # a worktree changed this recently counts as having an agent on it
 POLL_SECONDS = 5  # the served page re-reads the board this often
-TASK_BASE = "chore/sdlc-automation"  # TODO: origin/main once this branch is merged (work-on-task lives there)
+TASK_BASE = "origin/main"  # task worktrees and the board branch start here; the server fetches it every minute
 
 
 @dataclass
