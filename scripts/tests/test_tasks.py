@@ -554,19 +554,20 @@ def test_column_lists_tasks_from_the_lowest_milestone_up():
 # --- discarding a task's worktree ------------------------------------------------
 
 
-def local_wt(dirty=2, ahead=1, branch="feature/T-0001-x"):
-    return {"T-0001-x": WorktreeInfo(name="T-0001-x", branch=branch, last_commit="1h ago · x", dirty=dirty, ahead=ahead, idle_min=3, agent=False)}
+def local_wt(dirty=2, unique=1, branch="feature/T-0001-x"):
+    return {"T-0001-x": WorktreeInfo(name="T-0001-x", branch=branch, last_commit="1h ago · x", dirty=dirty, ahead=9, idle_min=3, agent=False, unique=unique)}
 
 
 def test_loss_text_says_what_a_discard_throws_away():
-    assert loss_text(local_wt()["T-0001-x"]) == "2 changed files and 1 commit not on origin/main"
-    assert loss_text(local_wt(dirty=0, ahead=3)["T-0001-x"]) == "3 commits not on origin/main"
-    assert loss_text(local_wt(dirty=0, ahead=0)["T-0001-x"]) == "nothing unsaved"
+    # Commits ahead of origin/main can live on the base branch too; only commits on no other branch are lost.
+    assert loss_text(local_wt()["T-0001-x"]) == "2 changed files and 1 commit on no other branch"
+    assert loss_text(local_wt(dirty=0, unique=3)["T-0001-x"]) == "3 commits on no other branch"
+    assert loss_text(local_wt(dirty=0, unique=0)["T-0001-x"]) == "nothing unsaved"
 
 
 def test_a_card_with_a_local_worktree_can_discard_it():
     html = render([task(status="doing", worktree="T-0001-x")], local_wt(), token="tok")
-    assert 'data-discard="T-0001" data-loss="2 changed files and 1 commit not on origin/main"' in html
+    assert 'data-discard="T-0001" data-loss="2 changed files and 1 commit on no other branch"' in html
     assert "data-discard" not in render([task(status="doing", worktree="T-0001-x")], local_wt())
 
 
@@ -577,6 +578,6 @@ def test_a_card_without_a_local_worktree_has_no_discard():
 
 
 def test_a_deleted_task_whose_worktree_remains_is_listed_with_discard():
-    html = render([task("T-0002")], local_wt(dirty=0, ahead=0), token="tok")
+    html = render([task("T-0002")], local_wt(dirty=0, unique=0), token="tok")
     assert "T-0001 was deleted" in html
     assert 'data-discard="T-0001" data-loss="nothing unsaved"' in html

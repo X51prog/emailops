@@ -71,7 +71,7 @@ Why the task exists and what it touches.
   about a deleted task whose worktree remains) removes everything of the task
   on this machine: the card, the Herdr panes inside the worktree, the worktree
   with its uncommitted work, and the local branch. The confirming click names
-  what is lost (changed files, commits not on `origin/main`). A pushed branch
+  what is lost (changed files, commits on no other branch). A pushed branch
   and its PR stay: delete them on GitHub. `make disk-clean ARGS="--apply"`
   frees the build directory the worktree leaves behind. Each edit is one commit on
   `chore/tasks-board` (worktree `.claude/worktrees/tasks-board`, created on

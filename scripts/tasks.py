@@ -93,6 +93,7 @@ class WorktreeInfo:
     idle_min: int  # minutes since the last change (dirty file or commit)
     agent: bool
     remote: bool = False  # a pushed branch with no local worktree
+    unique: int = 0  # commits on no other local or remote branch: what removing the branch loses
 
 
 @dataclass
@@ -370,8 +371,8 @@ def loss_text(wt):
     parts = []
     if wt.dirty:
         parts.append(f"{wt.dirty} changed file{'s' if wt.dirty != 1 else ''}")
-    if wt.ahead:
-        parts.append(f"{wt.ahead} commit{'s' if wt.ahead != 1 else ''} not on origin/main")
+    if wt.unique:
+        parts.append(f"{wt.unique} commit{'s' if wt.unique != 1 else ''} on no other branch")
     return " and ".join(parts) or "nothing unsaved"
 
 
@@ -766,6 +767,7 @@ def activity(path, branch, label, has_process, now):
 
     status = out("status", "--porcelain").splitlines()
     ahead = out("rev-list", "--count", "origin/main..HEAD").strip()
+    unique = out("rev-list", "--count", "HEAD", "--not", f"--exclude=refs/heads/{branch}", "--branches", "--remotes").strip()
     commit_time = out("log", "-1", "--format=%ct").strip()
     times = [int(commit_time)] if commit_time.isdigit() else []
     for line in status:
@@ -783,6 +785,7 @@ def activity(path, branch, label, has_process, now):
         ahead=int(ahead) if ahead.isdigit() else 0,
         idle_min=idle_min,
         agent=is_active(idle_min, has_process),
+        unique=int(unique) if unique.isdigit() else 0,
     )
 
 
