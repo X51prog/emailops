@@ -1,6 +1,6 @@
 ---
 name: work-on-task
-description: Start or resume work on one roadmap task from tasks/ (T-NNNN) in its own worktree — read the task file, create or reuse the worktree and its feature branch off main, set status doing, keep a Progress line current so the live board (make tasks-html) shows where it stands, and drive the change with TDD and the repo's gates. Use when the user types /work-on-task T-NNNN, clicks "Open in Claude" on the task board, or asks to pick up a task by id.
+description: Start or resume work on one roadmap task from tasks/ (T-NNNN) in its own worktree — read the task file, create or reuse the worktree and its feature branch off main, set status doing, keep a Progress line current so the live board (make tasks-serve) shows where it stands, and drive the change with TDD and the repo's gates. Use when the user types /work-on-task T-NNNN, clicks "Open in Herdr" on the task board, or asks to pick up a task by id.
 argument-hint: <T-NNNN>
 ---
 
@@ -40,8 +40,8 @@ In the worktree, edit only this task's file:
   line: what is done and what is next. Keep it to one line and rewrite it at
   every checkpoint; it is what the board shows.
 
-Commit that change on the branch (`chore: start <id>`). The edit also
-triggers the board-refresh hook.
+Commit that change on the branch (`chore: start <id>`). The live board
+reads the worktree directly, so it shows the change within seconds.
 
 ## 4. Do the work
 

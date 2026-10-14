@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the task files under tasks/ and render them as a live HTML board.
+"""Validate the task files under tasks/ and build the live task board page.
 
 Every task is one Markdown file, tasks/T-NNNN-slug.md, with a frontmatter block
 (id, title, status, milestone, pr) and a free-form body. The files are the
@@ -18,19 +18,16 @@ Usage:
   tasks.py prune-done
       git rm the done tasks of this checkout; the release skill runs it so a
       release commit drops the tasks it shipped.
-  tasks.py html [--out PATH]
-      Build the board and write one self-contained page. Default output:
-      <main checkout>/tasks/index.html (gitignored). Read-only otherwise.
-      The board layers, per task, the most advanced status from: the base branch
-      (TASK_BASE), the board's own branch (chore/tasks-board: new tasks, milestone edits and
-      deletions made from the live board), the task's own worktree (feature/T-NNNN-*,
-      uncommitted edits included) and a pushed feature/T-NNNN-* branch with no local
-      worktree (another machine or a cloud session). Other worktrees are ignored:
-      each carries a stale copy of every task. Task worktrees add their activity
-      (branch, last commit, dirty files, commits ahead of origin/main, minutes since
-      the last change, and whether an agent is on it).
 
-  The live board (scripts/task_board.py, make tasks-serve) renders the same page.
+The board page (served by scripts/task_board.py, make tasks-serve) layers, per
+task, the most advanced status from: the base branch (TASK_BASE), the board's
+own branch (chore/tasks-board: new tasks, milestone edits and deletions made
+from the board), the task's own worktree (feature/T-NNNN-*, uncommitted edits
+included) and a pushed feature/T-NNNN-* branch with no local worktree (another
+machine or a cloud session). Other worktrees are ignored: each carries a stale
+copy of every task. Task worktrees add their activity (branch, last commit,
+dirty files, commits ahead of origin/main, minutes since the last change, and
+whether an agent is on it).
 """
 
 # The URL handler runs macOS /usr/bin/python3 (3.9): keep annotations lazy.
@@ -39,7 +36,6 @@ from __future__ import annotations
 import argparse
 import html
 import json
-import os
 import re
 import subprocess
 import sys
@@ -64,7 +60,6 @@ MILESTONE_RE = re.compile(r"^[0-9A-Za-z][0-9A-Za-z._-]{0,31}$")
 ARTIFACTS = Path(".claude") / "task-artifacts.local.json"  # per task worktree, gitignored
 MAX_ARTIFACTS = 20
 NEEDS_YOU = ("blocked", "done")  # Herdr states where the agent waits for the user
-RELOAD_SECONDS = 20
 ACTIVE_MINUTES = 10  # a worktree changed this recently counts as having an agent on it
 POLL_SECONDS = 5  # the served page re-reads the board this often
 TASK_BASE = "chore/sdlc-automation"  # TODO: origin/main once this branch is merged (work-on-task lives there)
@@ -355,11 +350,6 @@ def is_active(idle_min, has_process):
     return has_process or idle_min < ACTIVE_MINUTES
 
 
-def deep_link(task_id, repo):
-    """claude-cli:// link that opens Claude Code with /work-on-task typed in (not sent)."""
-    return f"claude-cli://open?q={quote('/work-on-task ' + task_id, safe='')}&repo={quote(repo, safe='')}"
-
-
 def task_of_path(path):
     """The task id of a path inside a task worktree (.claude/worktrees/T-NNNN-slug), else None. Pure."""
     m = TASK_PATH_RE.search(path)
@@ -403,26 +393,23 @@ def agents_by_task(entries):
     return found
 
 
-def render_html(tasks, worktrees, repo, generated, warnings=(), token=None, milestones=(), agents=None, artifacts=None):
-    """The board as one self-contained page; with a token, the live page tasks.py serve returns. Pure."""
+def render_html(tasks, worktrees, repo, generated, token, warnings=(), milestones=(), agents=None, artifacts=None):
+    """The board page task_board.py serves; token guards the requests it sends back. Pure."""
     e = html.escape
     milestones = list(milestones) + sorted({t.milestone for t in tasks} - set(milestones))
     agents = agents or {}
     artifacts = artifacts or {}
 
     def artifact_href(task_id, i, path):
-        # Served: through the board (a page on http:// cannot open file://). Static: the file itself.
-        return f"/a/{task_id}/{i}/{quote(Path(path).name)}" if token else Path(path).as_uri()
+        # Through the board: a page on http:// cannot open file://.
+        return f"/a/{task_id}/{i}/{quote(Path(path).name)}"
     columns = []
     for status in STATUSES:
         cards = []
         for t in sorted((t for t in tasks if t.status == status), key=lambda t: (milestone_key(t.milestone), t.id)):
             wt = worktrees.get(t.worktree)
-            if token:
-                choices = "".join(f'<option value="{e(m)}"{" selected" if m == t.milestone else ""}>{e(m)}</option>' for m in milestones)
-                meta = [f'<select class="msel" data-task="{e(t.id)}">{choices}</select>']
-            else:
-                meta = [f'<span class="pill">{e(t.milestone)}</span>']
+            choices = "".join(f'<option value="{e(m)}"{" selected" if m == t.milestone else ""}>{e(m)}</option>' for m in milestones)
+            meta = [f'<select class="msel" data-task="{e(t.id)}">{choices}</select>']
             if t.pr is not None:
                 meta.append(f'<a class="pill" href="https://github.com/{e(repo)}/pull/{t.pr}" target="_blank" rel="noopener">#{t.pr}</a>')
             if t.issue is not None:
@@ -433,7 +420,7 @@ def render_html(tasks, worktrees, repo, generated, warnings=(), token=None, mile
                 state = '<span class="agent">● agent active</span>' if ag.status == "working" else f'<span class="state">{e(ag.status)}</span>'
                 chips = [f'<span class="pill">on {e(ag.machine)}</span>', state]
                 if needs_you(ag.status):
-                    chips.append(f'<button class="chip needs" data-focus="{e(t.id)}">needs you</button>' if token else '<span class="chip needs">needs you</span>')
+                    chips.append(f'<button class="chip needs" data-focus="{e(t.id)}">needs you</button>')
                 live = f'<div class="live">{"".join(chips)}</div>'
             arts = artifacts.get(t.id, [])
             links = "".join(
@@ -462,10 +449,7 @@ def render_html(tasks, worktrees, repo, generated, warnings=(), token=None, mile
             delete = f'<button class="btn danger" data-delete="{e(t.id)}">Delete</button>'
             if wt is not None and not wt.remote and t.worktree not in (MAIN, BOARD):
                 delete += discard_button(t.id, wt)
-            if token:
-                launch = f'<button class="btn primary" data-launch="{e(t.id)}">Open in Herdr</button>'
-            else:
-                launch = f'<a class="btn primary" href="{e(deep_link(t.id, repo))}">Open in Claude</a>'
+            launch = f'<button class="btn primary" data-launch="{e(t.id)}">Open in Herdr</button>'
             cards.append(
                 f'<article class="card" id="{e(t.id)}" data-milestone="{e(t.milestone)}"{' data-agent="1"' if ag else ""} '
                 f'data-text="{e((t.id + " " + t.title + " " + t.body).lower())}">'
@@ -474,7 +458,7 @@ def render_html(tasks, worktrees, repo, generated, warnings=(), token=None, mile
                 f'<div class="actions">{launch}'
                 f'<button class="btn" data-copy="{e(command)}">Copy command</button>'
                 f'<button class="btn" data-open="{e(t.id)}">Details</button>'
-                f'{delete if token else ""}</div>'
+                f'{delete}</div>'
                 f'<div class="body" hidden>{render_markdown(t.body)}</div><ul class="arts" hidden>{links}</ul></article>'
             )
         columns.append(
@@ -487,31 +471,20 @@ def render_html(tasks, worktrees, repo, generated, warnings=(), token=None, mile
     for wt in worktrees.values():
         m = TASK_BRANCH_RE.match(wt.branch)
         if not wt.remote and m and m.group(1) not in ids:
-            button = discard_button(m.group(1), wt) if token else ""
-            notes += f'<p class="warn">{e(m.group(1))} was deleted; its worktree <code>{e(wt.branch)}</code> is still here. {button}</p>'
+            notes += f'<p class="warn">{e(m.group(1))} was deleted; its worktree <code>{e(wt.branch)}</code> is still here. {discard_button(m.group(1), wt)}</p>'
 
-    new_ms = (
-        '<button class="btn primary" id="newtask">New task</button>'
-        '<input id="newms" placeholder="New milestone" maxlength="32"><button class="btn" id="addms">Add</button>'
-        if token
-        else ""
-    )
     return PAGE.format(
         generated=e(generated),
         options=options,
-        new_ms=new_ms,
-        new_panel=NEW_PANEL.format(options=options) if token else "",
+        new_panel=NEW_PANEL.format(options=options),
         notes=notes,
         columns="".join(columns),
-        token=json.dumps(token or ""),
-        refresh=(SERVE_JS % (POLL_SECONDS * 1000)) if token else (STATIC_JS % (RELOAD_SECONDS * 1000)),
+        token=json.dumps(token),
+        refresh=SERVE_JS % (POLL_SECONDS * 1000),
     )
 
 
-# Static file: regenerated by a hook whenever an agent edits a task; reload to pick it up, but not mid-typing.
-STATIC_JS = "function refresh() {}\nsetInterval(() => { if (document.activeElement !== q) location.reload(); }, %d);"
-
-# Served page: swap in a fresh board without losing scroll, filter or the open panel.
+# Swap in a fresh board without losing scroll, filter or the open panel.
 SERVE_JS = """async function refresh() {
   // Not while the reader types or picks: swapping the board would drop the control.
   if (["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
@@ -592,7 +565,8 @@ textarea {{ font:13px/1.5 ui-monospace, monospace; padding:6px 8px; border:1px s
 <div class="top"><h1>Tasks</h1>
 <select id="ms"><option value="">All milestones</option>{options}</select>
 <input id="q" type="search" placeholder="Search">
-{new_ms}
+<button class="btn primary" id="newtask">New task</button>
+<input id="newms" placeholder="New milestone" maxlength="32"><button class="btn" id="addms">Add</button>
 <span class="gen">Generated {generated}</span></div>
 <div id="notes">{notes}</div>
 <main class="board">{columns}</main>
@@ -628,7 +602,7 @@ function openTask(id) {{
   if (id !== shown) {{ poutd.open = false; pout.textContent = ""; shown = id; }}
   document.getElementById("ptitle").textContent = id + " · " + card.querySelector("h3").textContent;
   document.getElementById("pbody").innerHTML = card.querySelector(".body").innerHTML;
-  panel.hidden = false; if (npanel) npanel.hidden = true; writeHash(id);
+  panel.hidden = false; npanel.hidden = true; writeHash(id);
   const parts = document.getElementById("parts"), arts = card.querySelector(".arts");
   parts.innerHTML = arts.innerHTML; parts.hidden = document.getElementById("partsh").hidden = !arts.children.length;
   poutd.hidden = !(TOKEN && card.dataset.agent);
@@ -884,23 +858,14 @@ def cmd_check():
     return 1 if errors else 0
 
 
-def build_page(token=None, agents=None, warnings=()):
+def build_page(token, agents=None, warnings=()):
     """(main checkout, page) built from collect()."""
     root, tasks, infos, milestones, found_warnings, artifacts = collect()
-    stamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S" if token else "%d/%m/%Y %H:%M")
-    page = render_html(tasks, infos, repo_slug(), stamp, [*warnings, *found_warnings], token, milestones, agents, artifacts)
+    stamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    page = render_html(
+        tasks, infos, repo_slug(), stamp, token, warnings=[*warnings, *found_warnings], milestones=milestones, agents=agents, artifacts=artifacts
+    )
     return root, page
-
-
-def cmd_html(out):
-    root, page = build_page()
-    target = Path(out) if out else root / "tasks" / "index.html"
-    target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_suffix(".tmp")
-    tmp.write_text(page, encoding="utf-8")
-    os.replace(tmp, target)  # never leave a half-written page for the auto-reload to pick up
-    print(target.as_uri())
-    return 0
 
 
 def cmd_artifact(path, label):
@@ -940,14 +905,12 @@ def main():
     art_p = sub.add_parser("artifact")
     art_p.add_argument("path")
     art_p.add_argument("--label")
-    html_p = sub.add_parser("html")
-    html_p.add_argument("--out")
     args = parser.parse_args()
     if args.cmd == "prune-done":
         return cmd_prune_done()
     if args.cmd == "artifact":
         return cmd_artifact(args.path, args.label)
-    return cmd_check() if args.cmd == "check" else cmd_html(args.out)
+    return cmd_check()
 
 
 if __name__ == "__main__":

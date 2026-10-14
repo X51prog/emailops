@@ -43,15 +43,7 @@ Why the task exists and what it touches.
 ## Commands
 
 - `make tasks-check`: validate the files (also runs in the pre-commit hook).
-- `make tasks-html`: write the live board to `tasks/index.html` in the main
-  checkout (gitignored) and print its `file://` URL. It reads every worktree,
-  so a task in progress elsewhere shows as `doing` with its branch and whether
-  a Claude session is running there. A Claude Code hook regenerates it after
-  each task edit; the page reloads itself every 20 seconds.
-- The board's **Open in Claude** button is a `claude-cli://` deep link that
-  opens a terminal with `/work-on-task T-NNNN` typed in. **Copy command** puts
-  the same command on the clipboard when the link handler is not registered.
-- `make tasks-serve` (`scripts/task_board.py`): the same board served live on
+- `make tasks-serve` (`scripts/task_board.py`): the task board, served live on
   `127.0.0.1:8780` (the printed URL carries a random token; leave it running in
   a terminal or Herdr pane). Every refresh re-reads the tasks and the agents
   Herdr runs here and on its saved machines, and the page updates in place

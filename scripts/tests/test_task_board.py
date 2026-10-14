@@ -67,7 +67,6 @@ def test_served_page_launches_through_the_server():
     html = render([task()], token="tok123")
     assert 'data-launch="T-0001"' in html
     assert "Open in Herdr" in html
-    assert "claude-cli://" not in html
     assert '"tok123"' in html
 
 

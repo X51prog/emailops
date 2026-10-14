@@ -8,7 +8,6 @@ from tasks import (  # noqa: E402
     AgentInfo,
     Task,
     WorktreeInfo,
-    deep_link,
     is_active,
     loss_text,
     add_artifact,
@@ -253,18 +252,11 @@ def test_a_task_only_in_one_worktree_is_kept():
     assert [t.id for t in merged] == ["T-0001", "T-0002"]
 
 
-# --- deep_link ------------------------------------------------------------
-
-
-def test_deep_link_encodes_the_prompt_and_repo():
-    assert deep_link("T-0001", "owner/repo") == "claude-cli://open?q=%2Fwork-on-task%20T-0001&repo=owner%2Frepo"
-
-
 # --- render_html ----------------------------------------------------------
 
 
-def render(tasks, worktrees=None, **kw):
-    return render_html(tasks, worktrees or {}, repo="owner/repo", generated="13/10/2026 10:00", **kw)
+def render(tasks, worktrees=None, token="tok", **kw):
+    return render_html(tasks, worktrees or {}, repo="owner/repo", generated="13/10/2026 10:00", token=token, **kw)
 
 
 def test_html_escapes_title_and_body():
@@ -274,10 +266,8 @@ def test_html_escapes_title_and_body():
     assert "&lt;b&gt;x&lt;/b&gt;" in html
 
 
-def test_html_carries_the_deep_link_and_copy_command():
-    html = render([task()])
-    assert "claude-cli://open?q=%2Fwork-on-task%20T-0001&amp;repo=owner%2Frepo" in html
-    assert 'claude &quot;/work-on-task T-0001&quot;' in html
+def test_card_carries_the_copy_command():
+    assert 'claude &quot;/work-on-task T-0001&quot;' in render([task()])
 
 
 def test_served_card_lets_you_change_the_milestone():
@@ -314,14 +304,6 @@ def test_todo_column_is_twice_as_wide():
 
 def test_served_board_can_create_a_task():
     assert 'id="newtask"' in render([task()], token="tok")
-    assert 'id="newtask"' not in render([task()])
-
-
-def test_static_page_has_no_edit_controls():
-    html = render([task()])
-    assert "data-delete" not in html
-    assert 'class="msel"' not in html
-    assert 'id="newms"' not in html
 
 
 def test_card_links_the_latest_artifact_through_the_server():
@@ -331,16 +313,8 @@ def test_card_links_the_latest_artifact_through_the_server():
     assert "eval report" in html
 
 
-def test_static_card_links_the_artifact_as_a_file():
-    arts = {"T-0001": [{"path": "/w/reports/run 1/index.html", "label": "eval report", "at": "t"}]}
-    assert 'href="file:///w/reports/run%201/index.html"' in render([task()], artifacts=arts)
-
-
-def test_html_auto_refreshes_and_shows_generation_time():
-    html = render([task()])
-    # A timed location.reload() keeps the URL hash (filter, search, open task); a meta refresh would too, but cannot pause while the reader is typing.
-    assert "location.reload()" in html
-    assert "13/10/2026 10:00" in html
+def test_html_shows_generation_time():
+    assert "13/10/2026 10:00" in render([task()])
 
 
 def test_html_contains_no_absolute_paths():
@@ -568,7 +542,6 @@ def test_loss_text_says_what_a_discard_throws_away():
 def test_a_card_with_a_local_worktree_can_discard_it():
     html = render([task(status="doing", worktree="T-0001-x")], local_wt(), token="tok")
     assert 'data-discard="T-0001" data-loss="2 changed files and 1 commit on no other branch"' in html
-    assert "data-discard" not in render([task(status="doing", worktree="T-0001-x")], local_wt())
 
 
 def test_a_card_without_a_local_worktree_has_no_discard():
