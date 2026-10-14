@@ -57,6 +57,9 @@ pub enum ThreadAction {
     Unstar,
     Archive,
     MoveToInbox,
+    /// Take every Spam message of the conversation back to the inbox and
+    /// record that it is not junk, so the detector never re-flags it.
+    NotSpam,
     /// Move every message of the conversation to the provider's Trash.
     Delete,
 }
@@ -117,6 +120,7 @@ pub enum ProviderAccess<'a> {
 ///   Trash and folder copies stay where they are.
 /// - **Move to inbox** brings back every archived message, and on IMAP every
 ///   message filed in a folder (the archive folder is one).
+/// - **Not spam** brings back every message filed in Spam.
 /// - **Delete** trashes every message, as deleting a conversation always has.
 pub fn plan_thread_action(action: ThreadAction, messages: &[Email]) -> Vec<String> {
     let ids = |pred: &dyn Fn(&Email) -> bool| -> Vec<String> {
@@ -143,6 +147,7 @@ pub fn plan_thread_action(action: ThreadAction, messages: &[Email]) -> Vec<Strin
         ThreadAction::Unstar => ids(&|m| m.is_starred),
         ThreadAction::Archive => ids(&|m| m.mailbox == "inbox"),
         ThreadAction::MoveToInbox => ids(&|m| m.mailbox == "archive" || m.mailbox.starts_with("folder:")),
+        ThreadAction::NotSpam => ids(&|m| m.mailbox == "spam"),
         ThreadAction::Delete => ids(&|_| true),
     }
 }
@@ -285,6 +290,7 @@ fn verb(action: ThreadAction) -> &'static str {
         ThreadAction::Unstar => "unstar",
         ThreadAction::Archive => "archive",
         ThreadAction::MoveToInbox => "move to the inbox",
+        ThreadAction::NotSpam => "take out of spam",
         ThreadAction::Delete => "delete",
     }
 }
@@ -297,6 +303,7 @@ fn past_tense(action: ThreadAction) -> &'static str {
         ThreadAction::Unstar => "Unstarred",
         ThreadAction::Archive => "Archived",
         ThreadAction::MoveToInbox => "Moved to the inbox",
+        ThreadAction::NotSpam => "Moved out of spam",
         ThreadAction::Delete => "Deleted",
     }
 }
@@ -336,6 +343,7 @@ pub async fn apply_to_thread(
             }
             ThreadAction::Archive => archive_message(db, email, writable(access)?).await?,
             ThreadAction::MoveToInbox => move_message_to_inbox(db, email, writable(access)?).await?,
+            ThreadAction::NotSpam => not_spam_message(db, email, writable(access)?).await?,
             ThreadAction::Delete => delete_email_with_provider(db, id, writable(access)?).await?,
         }
     }
@@ -434,6 +442,15 @@ async fn move_message_to_inbox(db: &Database, email: &Email, provider: Option<&d
     refile_moved_row(db, &email.id, &new_id, "inbox")
 }
 
+/// Bring one Spam message back to the inbox — the inverse of "Confirm junk" —
+/// and record the user's judgement under the id the message has now (IMAP
+/// and Graph re-key a moved message). The move comes first: a refused move
+/// leaves the message in Spam and records nothing.
+async fn not_spam_message(db: &Arc<Database>, email: &Email, provider: Option<&dyn EmailProvider>) -> Result<()> {
+    let new_id = super::spam::restore_from_spam(db, email, pushable(provider, email)).await?;
+    crate::services::junk::set_feedback(db, &email.account_id, &new_id, false).await
+}
+
 /// Widen each row's star to its thread's: in the thread-deduped lists a row
 /// stands for its conversation, which is starred when any message is.
 pub fn widen_stars_to_threads(db: &Database, emails: &mut [Email]) -> Result<()> {
@@ -457,7 +474,7 @@ pub fn widen_stars_to_threads(db: &Database, emails: &mut [Email]) -> Result<()>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sync::provider::{EmailCategory, FakeEmailProvider, FakeFolderOp, FakeMailboxOp};
+    use crate::sync::provider::{EmailCategory, FakeEmailProvider, FakeFolderOp, FakeMailboxOp, MessageRef};
 
     fn message(id: &str, ts: i64, mailbox: &str) -> Email {
         Email {
@@ -574,6 +591,21 @@ mod tests {
         assert_eq!(
             plan_thread_action(ThreadAction::MoveToInbox, &thread),
             ids(&["arch", "filed"])
+        );
+    }
+
+    #[test]
+    fn not_spam_takes_only_the_spam_messages() {
+        let thread = [
+            message("in", 1, "inbox"),
+            message("sent", 2, "sent"),
+            message("junk1", 3, "spam"),
+            message("arch", 4, "archive"),
+            message("junk2", 5, "spam"),
+        ];
+        assert_eq!(
+            plan_thread_action(ThreadAction::NotSpam, &thread),
+            ids(&["junk1", "junk2"])
         );
     }
 
@@ -884,6 +916,95 @@ mod tests {
                 mailbox_value: "inbox".to_string()
             }]
         );
+    }
+
+    fn junk_override(db: &Database, id: &str) -> Option<String> {
+        db.get_junk_verdicts_batch(&[id.to_string()])
+            .unwrap()
+            .remove(id)
+            .and_then(|v| v.user_override)
+    }
+
+    #[tokio::test]
+    async fn not_spam_moves_the_spam_messages_to_the_inbox_and_records_not_junk() {
+        let junk = message("a", 1, "spam");
+        let db = test_db(&[junk.clone(), message("b", 2, "inbox")]);
+        let provider = FakeEmailProvider::new("me@example.com", "Me");
+        provider.add_message(junk, EmailCategory::Primary, vec![]);
+
+        run(&db, ThreadAction::NotSpam, ProviderAccess::Ready(&provider))
+            .await
+            .unwrap();
+
+        assert_eq!(row(&db, "a").unwrap().mailbox, "inbox");
+        assert_eq!(
+            provider.folder_ops(),
+            vec![FakeFolderOp::Move {
+                message_id: "a".to_string(),
+                mailbox_value: "inbox".to_string()
+            }]
+        );
+        assert_eq!(junk_override(&db, "a").as_deref(), Some("not_junk"));
+        assert_eq!(junk_override(&db, "b"), None);
+    }
+
+    #[tokio::test]
+    async fn not_spam_records_not_junk_under_the_id_the_provider_gave_the_message() {
+        let junk = message("a", 1, "spam");
+        let db = test_db(std::slice::from_ref(&junk));
+        let provider = FakeEmailProvider::new("me@example.com", "Me");
+        provider.add_message(junk, EmailCategory::Primary, vec![]);
+        provider.set_move_result(Some(MessageRef {
+            id: "a-moved".to_string(),
+            thread_id: "t-1".to_string(),
+        }));
+
+        run(&db, ThreadAction::NotSpam, ProviderAccess::Ready(&provider))
+            .await
+            .unwrap();
+
+        assert_eq!(row(&db, "a-moved").unwrap().mailbox, "inbox");
+        assert_eq!(junk_override(&db, "a-moved").as_deref(), Some("not_junk"));
+    }
+
+    #[tokio::test]
+    async fn not_spam_of_a_message_the_provider_lost_is_moved_locally() {
+        // The fake provider has never seen "a": its move answers NotFound.
+        let db = test_db(&[message("a", 1, "spam")]);
+        let provider = FakeEmailProvider::new("me@example.com", "Me");
+
+        run(&db, ThreadAction::NotSpam, ProviderAccess::Ready(&provider))
+            .await
+            .unwrap();
+
+        assert_eq!(row(&db, "a").unwrap().mailbox, "inbox");
+        assert_eq!(junk_override(&db, "a").as_deref(), Some("not_junk"));
+    }
+
+    #[tokio::test]
+    async fn not_spam_with_an_unreachable_provider_leaves_the_thread_in_spam() {
+        let db = test_db(&[message("a", 1, "spam")]);
+        let offline = AppError::SyncError("offline".to_string());
+
+        let err = run(&db, ThreadAction::NotSpam, ProviderAccess::Unreachable(&offline))
+            .await
+            .unwrap_err();
+
+        assert!(matches!(err, AppError::SyncError(_)), "{err:?}");
+        assert_eq!(row(&db, "a").unwrap().mailbox, "spam");
+        assert_eq!(junk_override(&db, "a"), None);
+    }
+
+    #[tokio::test]
+    async fn not_spam_on_a_local_only_account_moves_without_provider_calls() {
+        let db = test_db(&[message("a", 1, "spam")]);
+
+        run(&db, ThreadAction::NotSpam, ProviderAccess::LocalOnly)
+            .await
+            .unwrap();
+
+        assert_eq!(row(&db, "a").unwrap().mailbox, "inbox");
+        assert_eq!(junk_override(&db, "a").as_deref(), Some("not_junk"));
     }
 
     #[tokio::test]
