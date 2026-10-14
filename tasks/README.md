@@ -77,7 +77,13 @@ Why the task exists and what it touches.
   `chore/tasks-board` (worktree `.claude/worktrees/tasks-board`, created on
   first use), or on the task's own branch once it is started; a refused commit
   (pre-commit hook) leaves the file as it was. Nothing is pushed: merge
-  `chore/tasks-board` through a PR when you want the edits on `main`.
+  `chore/tasks-board` through a PR (with a merge commit; the release skill
+  offers it in Phase 1a) when you want the edits on `main`. Once its edits are
+  merged, the board fast-forwards the branch to the base before its next edit,
+  so it never drifts.
+- From Claude: "create a task for …" (the `new-task` skill) drafts the title,
+  context and acceptance and commits the task on `chore/tasks-board` through
+  `python3 scripts/task_board.py new --title … --milestone … --body-file …`.
 - `python3 scripts/tasks.py artifact <path> --label "eval report"` (from a
   task worktree; `/work-on-task` does it) records a file the session produced.
   The card links the latest one and **Details** lists them; the live board

@@ -1,18 +1,22 @@
 """The live board server: request authorization and launching tasks in Herdr."""
 
 import pathlib
+import subprocess
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+import task_board  # noqa: E402
 from task_board import (  # noqa: E402
     agent_name,
     artifact_target,
     authorized,
+    create_task,
     panes_in,
     post_params,
     pick_workspace,
     raise_command,
     read_args,
+    sync_board,
     task_checkout,
     task_worktree,
     terminal_of,
@@ -207,3 +211,60 @@ def test_task_checkout_picks_only_the_task_worktree():
 def test_task_checkout_ignores_a_task_branch_checked_out_outside_the_worktrees_dir():
     # The main checkout on a task branch must never be removed.
     assert task_checkout("T-0002", [(pathlib.Path("/r"), "feature/T-0002-x")]) is None
+
+
+# --- board branch lifecycle (real git in a temp repo) ---------------------------
+
+
+def sh(cwd, *args):
+    return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=True).stdout.strip()
+
+
+def repo_with_board(tmp_path):
+    """A repo on main with tasks/ and a board worktree on chore/tasks-board."""
+    root = tmp_path / "repo"
+    (root / "tasks").mkdir(parents=True)
+    sh(tmp_path, "init", "-q", "-b", "main", str(root))
+    sh(root, "config", "user.email", "dev@example.com")
+    sh(root, "config", "user.name", "Dev")
+    (root / "tasks" / "milestones.md").write_text("- 0.7.0\n- later\n")
+    (root / "tasks" / "T-0001-a.md").write_text("---\nid: T-0001\ntitle: A\nstatus: todo\nmilestone: later\npr: null\n---\n\nBody.\n")
+    sh(root, "add", "-A")
+    sh(root, "commit", "-q", "-m", "init")
+    board = root / ".claude" / "worktrees" / "tasks-board"
+    sh(root, "worktree", "add", "-q", "-b", "chore/tasks-board", str(board), "main")
+    return root, board
+
+
+def commit_file(cwd, name, text, message):
+    (cwd / name).write_text(text)
+    sh(cwd, "add", name)
+    sh(cwd, "commit", "-q", "-m", message)
+
+
+def test_a_merged_board_moves_up_to_the_base(tmp_path):
+    root, board = repo_with_board(tmp_path)
+    commit_file(board, "tasks/milestones.md", "- 0.7.0\n- 0.8.0\n- later\n", "board edit")
+    sh(root, "merge", "-q", "--no-ff", "-m", "merge board", "chore/tasks-board")
+    commit_file(root, "README", "x\n", "more work on main")
+    sync_board(board, "main")
+    assert sh(board, "rev-parse", "HEAD") == sh(root, "rev-parse", "main")
+
+
+def test_a_board_with_unmerged_edits_stays_put(tmp_path):
+    root, board = repo_with_board(tmp_path)
+    commit_file(board, "tasks/milestones.md", "- 0.7.0\n- 0.8.0\n- later\n", "board edit")
+    commit_file(root, "README", "x\n", "more work on main")
+    head = sh(board, "rev-parse", "HEAD")
+    sync_board(board, "main")
+    assert sh(board, "rev-parse", "HEAD") == head
+
+
+def test_create_task_commits_the_next_id_on_the_board(tmp_path, monkeypatch):
+    root, board = repo_with_board(tmp_path)
+    monkeypatch.chdir(root)
+    monkeypatch.setattr(task_board, "TASK_BASE", "main")
+    task_id, name = create_task("Do a thing", "0.7.0", "")
+    assert (task_id, name) == ("T-0002", "tasks/T-0002-do-a-thing.md")
+    assert sh(board, "log", "-1", "--format=%s") == "chore: add T-0002"
+    assert "title: Do a thing" in (board / name).read_text()

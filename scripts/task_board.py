@@ -17,10 +17,15 @@ Usage:
       - Details: the agent's latest output and the artifacts the session
         recorded (tasks.py artifact), served from /a/T-NNNN/<n>/... so an HTML
         report keeps its relative assets.
-      - Milestones: create one, or move a task to another. Delete a task
-        nobody started. Edits are committed on chore/tasks-board (its worktree
-        is .claude/worktrees/tasks-board, created on first use), or on the
+      - New task, new milestone, a task's milestone, Delete (hides the task
+        everywhere) and Discard worktree (removes the task's panes, worktree
+        and local branch). Edits are committed on chore/tasks-board (its
+        worktree is .claude/worktrees/tasks-board, created on first use and
+        fast-forwarded to TASK_BASE once its edits are merged), or on the
         task's own branch once it is started. Nothing is pushed.
+  task_board.py new --title TEXT --milestone NAME [--body-file PATH|-]
+      Commit a new todo task on chore/tasks-board and print its id; the
+      new-task skill uses it for "create a task for ...".
 """
 
 from __future__ import annotations
@@ -265,14 +270,25 @@ def find_task(task_id):
 
 
 def board_worktree(root):
-    """The checkout the board commits to, created off TASK_BASE on first use."""
+    """The checkout the board commits to: created off TASK_BASE on first use, brought up to it once merged."""
     path = root / ".claude" / "worktrees" / BOARD
     if not path.exists():
         if branch_exists(BOARD_BRANCH):
             git("worktree", "add", str(path), BOARD_BRANCH)
         else:
             git("worktree", "add", "-b", BOARD_BRANCH, str(path), TASK_BASE)
+    sync_board(path, TASK_BASE)
     return path
+
+
+def sync_board(path, base):
+    """Fast-forward the board branch to base when every edit on it is already merged.
+
+    PRs land as merge commits here, so a merged board is an ancestor of base.
+    A board with unmerged edits is left alone: those go to main through a PR.
+    """
+    if subprocess.run(["git", "merge-base", "--is-ancestor", "HEAD", base], cwd=path, capture_output=True).returncode == 0:
+        git("merge", "-q", "--ff-only", base, cwd=path)
 
 
 def commit(cwd, path, message):
@@ -311,18 +327,23 @@ def set_milestone(query):
 
 
 def new_task(query):
+    create_task(query.get("title", ""), query.get("milestone", ""), query.get("body", ""))
+
+
+def create_task(title, milestone, body):
+    """Commit a new todo task on the board branch; (id, path in the repo)."""
     board = board_worktree(main_root())
-    milestone = query.get("milestone", "")
     if milestone not in read_milestones(board):
         raise ValueError(f"no milestone {milestone!r}; create it first")
     # Every id any branch ever had, so a deleted task's id (and its old branches) is never reused.
     used = re.findall(r"tasks/(T-\d{4})-", git("log", "--all", "--format=", "--name-only", "--", "tasks/", cwd=board))
     task_id = next_id(used + [f.name[:6] for f in (board / "tasks").glob("T-*.md")])
-    text = new_task_text(task_id, query.get("title", ""), milestone, query.get("body", ""))
-    name = f"tasks/{task_id}-{slugify(query['title']) or 'task'}.md"
+    text = new_task_text(task_id, title, milestone, body)
+    name = f"tasks/{task_id}-{slugify(title) or 'task'}.md"
     (board / name).write_text(text, encoding="utf-8")
     git("add", name, cwd=board)
     commit(board, name, f"chore: add {task_id}")
+    return task_id, name
 
 
 def delete_task(query):
@@ -485,7 +506,24 @@ def serve(port):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--port", type=int, default=PORT)
-    return serve(parser.parse_args().port)
+    sub = parser.add_subparsers(dest="cmd")
+    new_p = sub.add_parser("new", help="commit a new todo task on the board branch and print its id")
+    new_p.add_argument("--title", required=True)
+    new_p.add_argument("--milestone", required=True)
+    new_p.add_argument("--body-file", help="Markdown details; '-' reads stdin; omit for the Context/Acceptance template")
+    args = parser.parse_args()
+    if args.cmd != "new":
+        return serve(args.port)
+    body = ""
+    if args.body_file:
+        body = sys.stdin.read() if args.body_file == "-" else Path(args.body_file).read_text(encoding="utf-8")
+    try:
+        task_id, name = create_task(args.title, args.milestone, body)
+    except (ValueError, subprocess.CalledProcessError) as err:
+        print(f"error: {err}", file=sys.stderr)
+        return 1
+    print(f"{task_id} {name} (committed on {BOARD_BRANCH}; not pushed)")
+    return 0
 
 
 if __name__ == "__main__":

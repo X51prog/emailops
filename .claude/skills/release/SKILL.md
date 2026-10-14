@@ -68,6 +68,23 @@ frontend dependencies leaves `node_modules` stale, and Phase 1b then reports
 `tsc`, vitest and the whole e2e sweep as failing for a reason that is not the
 code.
 
+### Phase 1a — Pending task-board edits
+
+Tasks, milestones and deletions made from the live board (`make tasks-serve`)
+are commits on the local branch `chore/tasks-board`, which only reaches
+`main` through a PR. Check it:
+
+```bash
+git log --oneline origin/main..chore/tasks-board -- tasks/
+```
+
+Empty, or no such branch → nothing to do. Otherwise list the commits and ask
+whether to open the PR now (push `chore/tasks-board`, then
+`gh pr create --base main --head chore/tasks-board --title "chore: task board edits"`).
+Merge it with a merge commit, not squash: the board fast-forwards to `main`
+on its next edit only when its commits are ancestors of `main`. The release
+does not wait for it.
+
 ## Phase 1b — Full verification
 
 Run this right after the pre-flight checks and before touching any file, so it
