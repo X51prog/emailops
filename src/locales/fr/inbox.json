@@ -202,6 +202,8 @@
       "archive_other": "Impossible d’archiver {{count}} conversations : {{detail}}",
       "moveToInbox_one": "Impossible de déplacer {{count}} conversation vers la boîte de réception : {{detail}}",
       "moveToInbox_other": "Impossible de déplacer {{count}} conversations vers la boîte de réception : {{detail}}",
+      "notSpam_one": "Impossible de sortir {{count}} conversation du spam : {{detail}}",
+      "notSpam_other": "Impossible de sortir {{count}} conversations du spam : {{detail}}",
       "delete_one": "Impossible de supprimer {{count}} conversation : {{detail}}",
       "delete_other": "Impossible de supprimer {{count}} conversations : {{detail}}"
     }

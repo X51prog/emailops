@@ -270,6 +270,8 @@ export function leavesList(action: ThreadAction, list: ListScope): boolean {
       return list === 'inbox';
     case 'moveToInbox':
       return list === 'archive' || list.startsWith('folder:');
+    case 'notSpam':
+      return list === 'spam';
     case 'unstar':
       return list === 'starred';
     case 'delete':
@@ -542,6 +544,9 @@ interface EmailStore {
   archiveThreads: (threads: ThreadRef[]) => Promise<void>;
   deleteThreads: (threads: ThreadRef[]) => Promise<void>;
   moveThreadsToInbox: (threads: ThreadRef[]) => Promise<void>;
+  /** Take the conversations' Spam messages back to the inbox, at the
+   *  provider too, and record that they are not junk. */
+  markThreadsNotSpam: (threads: ThreadRef[]) => Promise<void>;
   /**
    * Move the given messages (bulk selection) to the inbox or an IMAP folder of
    * `accountId`, in one backend call. Rows leave the list at once; those the
@@ -1232,6 +1237,12 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
           ? { ...e, mailbox: 'inbox' }
           : e,
       ),
+    })),
+
+  markThreadsNotSpam: (threads) =>
+    runThreadAction(threads, 'notSpam', (state, keys) => ({
+      ...state,
+      emails: state.emails.map((e) => (keys.has(keyOf(e)) && e.mailbox === 'spam' ? { ...e, mailbox: 'inbox' } : e)),
     })),
 
   deleteEmail: async (accountId, emailId) => {

@@ -162,6 +162,9 @@ describe('leavesList', () => {
     ['delete', 'inbox', true],
     ['delete', 'starred', true],
     ['delete', 'search', true],
+    ['notSpam', 'spam', true],
+    ['notSpam', 'inbox', false],
+    ['notSpam', 'search', false],
   ] as const)('%s in the %s list → %s', (action, list, expected) => {
     expect(leavesList(action, list)).toBe(expected);
   });
@@ -207,6 +210,36 @@ describe('thread action store actions', () => {
     const state = useEmailStore.getState();
     expect(state.emails[0].isStarred).toBe(true);
     expect(state.selectedEmail?.id).toBe('a');
+  });
+
+  it('not spam moves the spam rows to the inbox and leaves the Spam list', async () => {
+    vi.mocked(api.applyThreadAction).mockResolvedValue({ failed: [] });
+    useEmailStore.setState({
+      listScope: 'spam',
+      emails: [email('s1', 't1', { mailbox: 'spam' }), email('s2', 't2', { mailbox: 'spam' })],
+      totalCount: 2,
+    });
+
+    await useEmailStore.getState().markThreadsNotSpam([{ accountId: 'acc', threadId: 't1' }]);
+
+    expect(api.applyThreadAction).toHaveBeenCalledWith([{ accountId: 'acc', threadId: 't1' }], 'notSpam');
+    expect(useEmailStore.getState().emails.map((e) => e.id)).toEqual(['s2']);
+  });
+
+  it('a refused not-spam puts the conversation back in the Spam list with a toast', async () => {
+    vi.mocked(api.applyThreadAction).mockResolvedValue({
+      failed: [{ accountId: 'acc', threadId: 't1', code: 'sync', params: {}, message: 'offline' }],
+    });
+    useEmailStore.setState({
+      listScope: 'spam',
+      emails: [email('s1', 't1', { mailbox: 'spam' })],
+      totalCount: 1,
+    });
+
+    await useEmailStore.getState().markThreadsNotSpam([{ accountId: 'acc', threadId: 't1' }]);
+
+    expect(useEmailStore.getState().emails.map((e) => [e.id, e.mailbox])).toEqual([['s1', 'spam']]);
+    expect(useToastStore.getState().toasts).toHaveLength(1);
   });
 
   it('an empty selection does nothing', async () => {

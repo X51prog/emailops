@@ -372,7 +372,15 @@ export interface ThreadRef {
 
 /** Thread-level mailbox actions, pushed to the provider (Gmail labels, Graph,
  *  IMAP flags/moves). Mirrors the Rust `ThreadAction`. */
-export type ThreadAction = 'markRead' | 'markUnread' | 'star' | 'unstar' | 'archive' | 'moveToInbox' | 'delete';
+export type ThreadAction =
+  | 'markRead'
+  | 'markUnread'
+  | 'star'
+  | 'unstar'
+  | 'archive'
+  | 'moveToInbox'
+  | 'notSpam'
+  | 'delete';
 
 /** A thread an action could not be applied to; `code`/`params`/`message` are
  *  the `AppError` wire shape, so `errorText(failure)` renders it. */

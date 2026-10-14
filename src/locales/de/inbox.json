@@ -202,6 +202,8 @@
       "archive_other": "{{count}} Unterhaltungen konnten nicht archiviert werden: {{detail}}",
       "moveToInbox_one": "{{count}} Unterhaltung konnte nicht in den Posteingang verschoben werden: {{detail}}",
       "moveToInbox_other": "{{count}} Unterhaltungen konnten nicht in den Posteingang verschoben werden: {{detail}}",
+      "notSpam_one": "{{count}} Unterhaltung konnte nicht aus dem Spam verschoben werden: {{detail}}",
+      "notSpam_other": "{{count}} Unterhaltungen konnten nicht aus dem Spam verschoben werden: {{detail}}",
       "delete_one": "{{count}} Unterhaltung konnte nicht gelöscht werden: {{detail}}",
       "delete_other": "{{count}} Unterhaltungen konnten nicht gelöscht werden: {{detail}}"
     }
