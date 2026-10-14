@@ -30,6 +30,7 @@ import hmac
 import json
 import mimetypes
 import os
+import re
 import secrets
 import shutil
 import socket
@@ -45,7 +46,6 @@ from tasks import (
     BOARD,
     BOARD_BRANCH,
     ID_RE,
-    MAIN,
     TASK_BASE,
     add_milestone,
     agents_by_task,
@@ -54,14 +54,19 @@ from tasks import (
     edit_location,
     git,
     main_root,
+    new_task_text,
+    next_id,
     parse_task,
+    read_milestones,
     set_field,
+    slugify,
     worktrees,
 )
 
 PORT = 8780
 FETCH_SECONDS = 60  # how often the server fetches origin, to see task branches pushed elsewhere
 OUTPUT_LINES = 80
+MAX_FORM = 64 * 1024  # bytes of a POST body (a new task's details)
 
 
 def task_worktree(file_name, root):
@@ -96,6 +101,13 @@ def authorized(method, path, headers, token, port):
     if headers.get("Host") not in local or not hmac.compare_digest(given, token):
         return False
     return method != "POST" or headers.get("Origin", "").removeprefix("http://") in local
+
+
+def post_params(query, body):
+    """Form fields of a POST: the query string plus a urlencoded body. Pure."""
+    params = {k: v[0] for k, v in parse_qs(query).items()}
+    params.update({k: v[0] for k, v in parse_qs(body, keep_blank_values=True).items()})
+    return params
 
 
 def artifact_target(artifact, rel):
@@ -278,11 +290,31 @@ def set_milestone(query):
     commit(cwd, f"tasks/{task.file}", f"chore: move {task.id} to milestone {name}")
 
 
+def new_task(query):
+    board = board_worktree(main_root())
+    milestone = query.get("milestone", "")
+    if milestone not in read_milestones(board):
+        raise ValueError(f"no milestone {milestone!r}; create it first")
+    # Every id any branch ever had, so a deleted task's id (and its old branches) is never reused.
+    used = re.findall(r"tasks/(T-\d{4})-", git("log", "--all", "--format=", "--name-only", "--", "tasks/", cwd=board))
+    task_id = next_id(used + [f.name[:6] for f in (board / "tasks").glob("T-*.md")])
+    text = new_task_text(task_id, query.get("title", ""), milestone, query.get("body", ""))
+    name = f"tasks/{task_id}-{slugify(query['title']) or 'task'}.md"
+    (board / name).write_text(text, encoding="utf-8")
+    git("add", name, cwd=board)
+    commit(board, name, f"chore: add {task_id}")
+
+
 def delete_task(query):
+    """Drop a task on the board branch; the board then hides it from every source.
+
+    A started task keeps its worktree, branch and agent: deleting a card never
+    discards code.
+    """
     root, task, _ = find_task(query.get("task", ""))
-    if task.worktree not in (MAIN, BOARD):
-        raise ValueError(f"{task.id} is in progress ({task.worktree}); drop it there instead")
     board = board_worktree(root)
+    if not (board / "tasks" / task.file).exists():
+        raise ValueError(f"{task.id} exists only in {task.worktree}; delete it there")
     git("rm", "-q", f"tasks/{task.file}", cwd=board)
     commit(board, f"tasks/{task.file}", f"chore: delete {task.id}")
 
@@ -328,6 +360,7 @@ def serve(port):
         "/milestone/new": new_milestone,
         "/milestone/set": set_milestone,
         "/delete": delete_task,
+        "/task/new": new_task,
     }
 
     class Handler(BaseHTTPRequestHandler):
@@ -374,8 +407,11 @@ def serve(port):
             route = urlsplit(self.path).path
             if not authorized("POST", self.path, self.headers, token, port) or route not in actions:
                 return self.reply(404, "not found", "text/plain")
+            length = int(self.headers.get("Content-Length") or 0)
+            if length > MAX_FORM:
+                return self.reply(413, "too large", "text/plain")
             try:
-                actions[route]({k: v[0] for k, v in parse_qs(urlsplit(self.path).query).items()})
+                actions[route](post_params(urlsplit(self.path).query, self.rfile.read(length).decode()))
                 self.reply(200, json.dumps({"ok": True}), "application/json")
             except (ValueError, RuntimeError, subprocess.CalledProcessError) as err:
                 print(f"POST {route} {self.task()}: {err}", file=sys.stderr)

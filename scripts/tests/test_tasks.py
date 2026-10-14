@@ -14,13 +14,18 @@ from tasks import (  # noqa: E402
     add_milestone,
     agents_by_task,
     edit_location,
+    excerpt,
     merge,
+    new_task_text,
+    next_id,
     needs_you,
     parse_milestones,
     parse_task,
     prune_done,
     render_html,
+    render_markdown,
     set_field,
+    slugify,
     task_of_path,
     validate,
 )
@@ -235,9 +240,10 @@ def test_a_task_deleted_on_the_board_is_gone():
     assert merge([task("T-0001"), task("T-0002")], deleted={"T-0001"}) == [task("T-0002")]
 
 
-def test_a_deleted_task_still_in_progress_in_its_worktree_stays():
-    merged = merge([task(worktree="main"), task(status="doing", worktree="T-0001-x")], deleted={"T-0001"})
-    assert [t.worktree for t in merged] == ["T-0001-x"]
+def test_a_task_deleted_on_the_board_is_gone_even_while_in_progress():
+    # Deleting from the board is the developer's call; a worktree or pushed branch does not bring it back.
+    tasks = [task(worktree="main"), task(status="doing", worktree="T-0001-x"), task(status="review", worktree="origin/feature/T-0001-x")]
+    assert merge(tasks, deleted={"T-0001"}) == []
 
 
 def test_a_task_only_in_one_worktree_is_kept():
@@ -279,9 +285,34 @@ def test_served_card_lets_you_change_the_milestone():
     assert 'id="newms"' in html
 
 
-def test_only_a_task_nobody_started_can_be_deleted():
+def test_any_task_can_be_deleted_from_the_served_board():
     assert 'data-delete="T-0001"' in render([task()], token="tok")
-    assert "data-delete" not in render([task(status="doing", worktree="T-0001-x")], token="tok")
+    assert 'data-delete="T-0001"' in render([task(status="doing", worktree="T-0001-x")], token="tok")
+
+
+def test_card_shows_the_start_of_the_details():
+    html = render([task(body="## Context\n\nFirst **line** here.\nSecond line.\n")])
+    assert '<p class="excerpt">First line here. Second line.</p>' in html
+
+
+def test_details_are_rendered_as_markdown():
+    html = render([task(body="## Context\n\n- one\n")])
+    assert "<h3>Context</h3>" in html
+    assert "<li>one</li>" in html
+
+
+def test_agent_output_starts_collapsed():
+    html = render([task()], token="tok")
+    assert '<details id="poutd">' in html
+
+
+def test_todo_column_is_twice_as_wide():
+    assert "grid-template-columns:minmax(360px, 2fr) repeat(4, minmax(180px, 1fr))" in render([task()])
+
+
+def test_served_board_can_create_a_task():
+    assert 'id="newtask"' in render([task()], token="tok")
+    assert 'id="newtask"' not in render([task()])
 
 
 def test_static_page_has_no_edit_controls():
@@ -425,3 +456,75 @@ def test_an_old_change_and_no_process_is_idle():
 def test_html_shows_minutes_since_last_change():
     wt = {"wt-a": WorktreeInfo(name="wt-a", branch="feature/T-0001-x", last_commit="2h ago · feat: x", dirty=2, ahead=1, idle_min=7, agent=False)}
     assert "last change 7 min ago" in render([task(status="doing", worktree="wt-a")], wt)
+
+
+# --- render_markdown -------------------------------------------------------
+
+
+def test_markdown_headings_paragraphs_and_lists():
+    out = render_markdown("## Context\n\nSome text\nwrapped.\n\n- a\n- b\n\n1. x\n2. y\n")
+    assert out == "<h3>Context</h3><p>Some text\nwrapped.</p><ul><li>a</li><li>b</li></ul><ol><li>x</li><li>y</li></ol>"
+
+
+def test_markdown_inline_code_bold_italic():
+    assert render_markdown("Use `a<b>` and **bold** and *it*.") == "<p>Use <code>a&lt;b&gt;</code> and <strong>bold</strong> and <em>it</em>.</p>"
+
+
+def test_markdown_code_block_is_kept_verbatim_and_escaped():
+    assert render_markdown("```\n**x** <y>\n```\n") == "<pre><code>**x** &lt;y&gt;</code></pre>"
+
+
+def test_markdown_escapes_raw_html():
+    assert "<script>" not in render_markdown("<script>alert(1)</script>")
+
+
+def test_markdown_links_only_http():
+    assert render_markdown("[docs](https://e.com/a?b=1&c=2)") == '<p><a href="https://e.com/a?b=1&amp;c=2" target="_blank" rel="noopener">docs</a></p>'
+    assert "href" not in render_markdown("[x](javascript:alert(1))")
+
+
+# --- excerpt ----------------------------------------------------------------
+
+
+def test_excerpt_takes_the_first_two_text_lines_without_markup():
+    body = "## Context\n\nAdd the `GGUF` file as a\n**chat** option for [Macs](https://e.com).\nThird line.\n"
+    assert excerpt(body) == "Add the GGUF file as a chat option for Macs."
+
+
+def test_excerpt_skips_list_markers_and_empty_bodies():
+    assert excerpt("## A\n\n- first\n- second\n") == "first second"
+    assert excerpt("") == ""
+
+
+# --- new tasks ----------------------------------------------------------------
+
+
+def test_slugify():
+    assert slugify("Qwen 3.6 27B in the embedded catalog!") == "qwen-3-6-27b-in-the-embedded-catalog"
+    assert slugify("Ñandú café") == "nandu-cafe"
+    assert len(slugify("word " * 30)) <= 40
+
+
+def test_next_id_follows_the_highest_ever_used():
+    assert next_id(["T-0001", "T-0012", "T-0003"]) == "T-0013"
+    assert next_id([]) == "T-0001"
+
+
+def test_new_task_text_parses_back():
+    text = new_task_text("T-0013", "Do a thing", "0.7.0", "")
+    t = parse_task(text, "T-0013-do-a-thing.md", "main")
+    assert (t.id, t.title, t.status, t.milestone, t.pr) == ("T-0013", "Do a thing", "todo", "0.7.0", None)
+    assert "## Acceptance" in t.body
+
+
+def test_new_task_text_keeps_the_given_body():
+    t = parse_task(new_task_text("T-0013", "Do a thing", "0.7.0", "Why.\r\n"), "T-0013-x.md", "main")
+    assert t.body == "Why.\n"
+
+
+def test_new_task_title_must_be_one_short_line():
+    import pytest
+
+    for bad in ("", "  ", "a\nb", "x" * 121):
+        with pytest.raises(ValueError):
+            new_task_text("T-0013", bad, "0.7.0", "")

@@ -22,7 +22,7 @@ Usage:
       Build the board and write one self-contained page. Default output:
       <main checkout>/tasks/index.html (gitignored). Read-only otherwise.
       The board layers, per task, the most advanced status from: the base branch
-      (TASK_BASE), the board's own branch (chore/tasks-board: milestone edits and
+      (TASK_BASE), the board's own branch (chore/tasks-board: new tasks, milestone edits and
       deletions made from the live board), the task's own worktree (feature/T-NNNN-*,
       uncommitted edits included) and a pushed feature/T-NNNN-* branch with no local
       worktree (another machine or a cloud session). Other worktrees are ignored:
@@ -44,6 +44,7 @@ import re
 import subprocess
 import sys
 import time
+import unicodedata
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -188,6 +189,112 @@ def prune_done(tasks):
     return [t.file for t in tasks if t.status == "done"]
 
 
+NEW_BODY = "## Context\n\nTo be written.\n\n## Acceptance\n\n- To be defined when the task starts.\n"
+
+
+def slugify(title):
+    """File-name slug of a title: ASCII words joined by '-', at most 40 chars. Pure."""
+    ascii_title = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]+", "-", ascii_title.lower()).strip("-")[:40].rstrip("-")
+
+
+def next_id(ids):
+    """The id after the highest one ever used, so a deleted task's id is never reused. Pure."""
+    return f"T-{max((int(i[2:]) for i in ids), default=0) + 1:04d}"
+
+
+def new_task_text(task_id, title, milestone, body):
+    """The file of a new todo task. Pure."""
+    title = title.strip()
+    if not title or "\n" in title or "\r" in title or len(title) > 120:
+        raise ValueError("the title must be one line of 1 to 120 characters")
+    body = body.replace("\r\n", "\n").strip("\n")
+    body = body + "\n" if body else NEW_BODY
+    return f"---\nid: {task_id}\ntitle: {title}\nstatus: todo\nmilestone: {milestone}\npr: null\n---\n\n{body}"
+
+
+LIST_RE = re.compile(r"^\s*(?:([-*])|\d+\.)\s+(.*)$")
+HEADING_RE = re.compile(r"^(#{1,6})\s+(.*)$")
+
+
+def inline_markdown(text):
+    """Code spans, links (http/https only), bold and italic of one escaped line. Pure."""
+    out = []
+    for part in re.split(r"(`[^`]+`)", text):
+        if len(part) > 1 and part.startswith("`") and part.endswith("`"):
+            out.append(f"<code>{html.escape(part[1:-1])}</code>")
+            continue
+        part = html.escape(part)
+        part = re.sub(r"\[([^\]]+)\]\((https?://[^)\s]+)\)", r'<a href="\2" target="_blank" rel="noopener">\1</a>', part)
+        part = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", part)
+        part = re.sub(r"(?<![*\w])\*(?!\s)(.+?)(?<!\s)\*(?![*\w])", r"<em>\1</em>", part)
+        out.append(part)
+    return "".join(out)
+
+
+def render_markdown(text):
+    """The subset of Markdown task files use (headings, paragraphs, lists, code) as escaped HTML. Pure."""
+    out, para, items, ordered = [], [], [], False
+
+    def flush():
+        nonlocal para, items
+        if para:
+            out.append(f"<p>{inline_markdown(chr(10).join(para))}</p>")
+        if items:
+            tag = "ol" if ordered else "ul"
+            out.append(f"<{tag}>" + "".join(f"<li>{inline_markdown(i)}</li>" for i in items) + f"</{tag}>")
+        para, items = [], []
+
+    lines = text.replace("\r\n", "\n").split("\n")
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        i += 1
+        if line.startswith("```"):
+            flush()
+            code = []
+            while i < len(lines) and not lines[i].startswith("```"):
+                code.append(lines[i])
+                i += 1
+            i += 1
+            out.append(f"<pre><code>{html.escape(chr(10).join(code))}</code></pre>")
+        elif m := HEADING_RE.match(line):
+            flush()
+            level = min(len(m.group(1)) + 1, 6)
+            out.append(f"<h{level}>{inline_markdown(m.group(2))}</h{level}>")
+        elif m := LIST_RE.match(line):
+            if para or (items and ordered != (m.group(1) is None)):
+                flush()
+            ordered = m.group(1) is None
+            items.append(m.group(2))
+        elif not line.strip():
+            flush()
+        elif items and line.startswith(" "):
+            items[-1] += " " + line.strip()
+        else:
+            if items:
+                flush()
+            para.append(line)
+    flush()
+    return "".join(out)
+
+
+def excerpt(body):
+    """The first two lines of text of a task body, without Markdown markup. Pure."""
+    lines = []
+    for line in body.splitlines():
+        line = line.strip()
+        if not line or line.startswith(("#", "```")):
+            continue
+        if m := LIST_RE.match(line):
+            line = m.group(2)
+        line = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", line)
+        lines.append(re.sub(r"[`*]", "", line))
+        if len(lines) == 2:
+            break
+    return " ".join(lines)
+
+
 def validate(tasks, milestones=None):
     """Errors for one checkout's tasks; milestones, when given, is the allowed list. Pure."""
     errors = []
@@ -214,7 +321,7 @@ def merge(tasks, deleted=()):
 
     The most advanced status wins; on a tie the task's own worktree beats the
     board branch, which beats the base. A task deleted on the board is dropped
-    unless its own worktree (or branch) still carries it.
+    from every source, its own worktree and pushed branch included.
     """
 
     def key(t):
@@ -222,7 +329,7 @@ def merge(tasks, deleted=()):
 
     best = {}
     for t in tasks:
-        if t.id in deleted and t.worktree in (MAIN, BOARD):
+        if t.id in deleted:
             continue
         cur = best.get(t.id)
         if cur is None or key(t) > key(cur):
@@ -328,6 +435,8 @@ def render_html(tasks, worktrees, repo, generated, warnings=(), token=None, mile
                         f"<span>{wt.dirty} changed · {wt.ahead} ahead of origin/main · last change {wt.idle_min} min ago</span></div>"
                     )
             command = f'claude "/work-on-task {t.id}"'
+            text = excerpt(t.body)
+            summary = f'<p class="excerpt">{e(text)}</p>' if text else ""
             delete = f'<button class="btn danger" data-delete="{e(t.id)}">Delete</button>'
             if token:
                 launch = f'<button class="btn primary" data-launch="{e(t.id)}">Open in Herdr</button>'
@@ -337,12 +446,12 @@ def render_html(tasks, worktrees, repo, generated, warnings=(), token=None, mile
                 f'<article class="card" id="{e(t.id)}" data-milestone="{e(t.milestone)}"{' data-agent="1"' if ag else ""} '
                 f'data-text="{e((t.id + " " + t.title + " " + t.body).lower())}">'
                 f'<header><span class="tid">{e(t.id)}</span>{"".join(meta)}</header>'
-                f'<h3>{e(t.title)}</h3>{live}{activity}'
+                f'<h3>{e(t.title)}</h3>{summary}{live}{activity}'
                 f'<div class="actions">{launch}'
                 f'<button class="btn" data-copy="{e(command)}">Copy command</button>'
                 f'<button class="btn" data-open="{e(t.id)}">Details</button>'
-                f'{delete if token and t.worktree in (MAIN, BOARD) else ""}</div>'
-                f'<pre class="body" hidden>{e(t.body)}</pre><ul class="arts" hidden>{links}</ul></article>'
+                f'{delete if token else ""}</div>'
+                f'<div class="body" hidden>{render_markdown(t.body)}</div><ul class="arts" hidden>{links}</ul></article>'
             )
         columns.append(
             f'<section class="col" data-status="{status}"><h2>{status} <span class="count">{len(cards)}</span></h2>'
@@ -350,11 +459,17 @@ def render_html(tasks, worktrees, repo, generated, warnings=(), token=None, mile
         )
     options = "".join(f'<option value="{e(m)}">{e(m)}</option>' for m in milestones)
     notes = "".join(f'<p class="warn">{e(w)}</p>' for w in warnings)
-    new_ms = '<input id="newms" placeholder="New milestone" maxlength="32"><button class="btn" id="addms">Add</button>' if token else ""
+    new_ms = (
+        '<button class="btn primary" id="newtask">New task</button>'
+        '<input id="newms" placeholder="New milestone" maxlength="32"><button class="btn" id="addms">Add</button>'
+        if token
+        else ""
+    )
     return PAGE.format(
         generated=e(generated),
         options=options,
         new_ms=new_ms,
+        new_panel=NEW_PANEL.format(options=options) if token else "",
         notes=notes,
         columns="".join(columns),
         token=json.dumps(token or ""),
@@ -368,7 +483,7 @@ STATIC_JS = "function refresh() {}\nsetInterval(() => { if (document.activeEleme
 # Served page: swap in a fresh board without losing scroll, filter or the open panel.
 SERVE_JS = """async function refresh() {
   // Not while the reader types or picks: swapping the board would drop the control.
-  if (["INPUT", "SELECT"].includes(document.activeElement.tagName)) return;
+  if (["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
   try {
     const r = await fetch("/?token=" + TOKEN, { cache: "no-store" });
     if (!r.ok) throw new Error(r.status);
@@ -379,6 +494,13 @@ SERVE_JS = """async function refresh() {
   } catch (err) { document.querySelector(".gen").textContent = "Board server unreachable (" + err.message + ")"; }
 }
 setInterval(refresh, %d);"""
+
+
+NEW_PANEL = """<aside id="npanel" class="side" hidden><button class="btn" id="nclose">Close</button><h2>New task</h2>
+<div class="form"><label>Title<input id="ntitle" maxlength="120"></label>
+<label>Milestone<select id="nms">{options}</select></label>
+<label>Details (Markdown; empty for the Context/Acceptance template)<textarea id="nbody"></textarea></label>
+<div class="actions"><button class="btn primary" id="ncreate">Create</button></div></div></aside>"""
 
 
 PAGE = """<!doctype html>
@@ -395,11 +517,13 @@ body {{ margin:0; background:var(--bg); color:var(--text); font:14px/1.45 -apple
 .top .gen {{ color:var(--muted); margin-left:auto; }}
 input, select {{ font:inherit; padding:5px 8px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--text); }}
 .warn {{ margin:8px 16px 0; color:var(--warn); }}
-.board {{ display:grid; grid-template-columns:repeat(5, minmax(220px, 1fr)); gap:12px; padding:16px; overflow-x:auto; }}
+.board {{ display:grid; grid-template-columns:minmax(360px, 2fr) repeat(4, minmax(180px, 1fr)); gap:12px; padding:16px; overflow-x:auto; }}
 @media (max-width: 760px) {{ .board {{ grid-template-columns:1fr; }} }}
 .col h2 {{ font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 8px; }}
 .count {{ font-weight:400; }}
-.card {{ background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px; margin-bottom:10px; }}
+.card {{ background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px; margin-bottom:10px; cursor:pointer; }}
+.card:hover {{ border-color:var(--accent); }}
+.excerpt {{ margin:0 0 8px; color:var(--muted); font-size:13px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }}
 .card header {{ display:flex; gap:6px; align-items:center; flex-wrap:wrap; }}
 .tid {{ font:12px ui-monospace, monospace; color:var(--muted); }}
 .pill {{ font-size:11px; padding:1px 6px; border:1px solid var(--line); border-radius:999px; color:var(--muted); text-decoration:none; }}
@@ -417,8 +541,20 @@ input, select {{ font:inherit; padding:5px 8px; border:1px solid var(--line); bo
 .btn.primary {{ background:var(--accent); border-color:var(--accent); color:#fff; }}
 .empty {{ color:var(--muted); }}
 .hidden {{ display:none; }}
-#panel {{ position:fixed; top:0; right:0; bottom:0; width:min(560px, 100%); background:var(--panel); border-left:1px solid var(--line); padding:16px; overflow:auto; z-index:3; box-shadow:-8px 0 24px rgba(0,0,0,.15); }}
-#panel pre {{ white-space:pre-wrap; font:13px/1.5 ui-monospace, monospace; }}
+.side {{ position:fixed; top:0; right:0; bottom:0; width:min(560px, 100%); background:var(--panel); border-left:1px solid var(--line); padding:16px; overflow:auto; z-index:3; box-shadow:-8px 0 24px rgba(0,0,0,.15); }}
+.side pre {{ white-space:pre-wrap; font:12px/1.5 ui-monospace, monospace; }}
+.md {{ font-size:14px; line-height:1.55; }}
+.md p {{ white-space:normal; }}
+.md code {{ font:12px ui-monospace, monospace; background:var(--bg); padding:1px 4px; border-radius:4px; }}
+.md pre {{ background:var(--bg); padding:8px; border-radius:6px; overflow:auto; }}
+.md pre code {{ padding:0; }}
+.md h3 {{ font-size:15px; margin:18px 0 6px; }}
+.md h4, .md h5, .md h6 {{ font-size:14px; margin:14px 0 4px; }}
+.md a {{ color:var(--accent); }}
+#poutd summary {{ cursor:pointer; font-weight:600; margin-top:16px; }}
+.form {{ display:flex; flex-direction:column; gap:10px; }}
+.form label {{ display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); }}
+textarea {{ font:13px/1.5 ui-monospace, monospace; padding:6px 8px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--text); min-height:220px; }}
 </style></head>
 <body>
 <div class="top"><h1>Tasks</h1>
@@ -428,9 +564,10 @@ input, select {{ font:inherit; padding:5px 8px; border:1px solid var(--line); bo
 <span class="gen">Generated {generated}</span></div>
 <div id="notes">{notes}</div>
 <main class="board">{columns}</main>
-<aside id="panel" hidden><button class="btn" id="close">Close</button><h2 id="ptitle"></h2><pre id="pbody"></pre>
+<aside id="panel" class="side" hidden><button class="btn" id="close">Close</button><h2 id="ptitle"></h2><div id="pbody" class="md"></div>
 <h3 id="partsh" hidden>Artifacts</h3><ul id="parts" hidden></ul>
-<h3 id="pouth" hidden>Agent output</h3><pre id="pout" hidden></pre></aside>
+<details id="poutd"><summary>Agent output</summary><pre id="pout"></pre></details></aside>
+{new_panel}
 <script>
 const TOKEN = {token};
 const ms = document.getElementById("ms"), q = document.getElementById("q"), panel = document.getElementById("panel");
@@ -447,22 +584,30 @@ function apply() {{
     col.querySelector(".count").textContent = n;
   }});
 }}
+const poutd = document.getElementById("poutd"), pout = document.getElementById("pout"), npanel = document.getElementById("npanel");
+let shown = "";
+function loadOutput() {{
+  if (!poutd.open || poutd.hidden) return;
+  fetch("/output?token=" + TOKEN + "&task=" + shown, {{ cache: "no-store" }}).then(r => r.text()).then(t => {{ pout.textContent = t; }}, () => {{ pout.textContent = "Agent output unavailable"; }});
+}}
 function openTask(id) {{
   const card = document.getElementById(id); if (!card) return;
+  // Another task: start with its output collapsed. The same one (a refresh): keep it as the reader left it.
+  if (id !== shown) {{ poutd.open = false; pout.textContent = ""; shown = id; }}
   document.getElementById("ptitle").textContent = id + " · " + card.querySelector("h3").textContent;
-  document.getElementById("pbody").textContent = card.querySelector(".body").textContent;
-  panel.hidden = false; writeHash(id);
+  document.getElementById("pbody").innerHTML = card.querySelector(".body").innerHTML;
+  panel.hidden = false; if (npanel) npanel.hidden = true; writeHash(id);
   const parts = document.getElementById("parts"), arts = card.querySelector(".arts");
   parts.innerHTML = arts.innerHTML; parts.hidden = document.getElementById("partsh").hidden = !arts.children.length;
-  const pout = document.getElementById("pout"), live = Boolean(TOKEN && card.dataset.agent);
-  pout.hidden = document.getElementById("pouth").hidden = !live;
-  if (live) fetch("/output?token=" + TOKEN + "&task=" + id, {{ cache: "no-store" }}).then(r => r.text()).then(t => {{ pout.textContent = t; }}, () => {{ pout.textContent = "Agent output unavailable"; }});
+  poutd.hidden = !(TOKEN && card.dataset.agent);
+  loadOutput();
 }}
-function post(path, b, label) {{
+poutd.addEventListener("toggle", loadOutput);
+function post(path, b, label, data) {{
   // A <select> reports through its title: setting its text would wipe its options.
   const show = text => {{ if (b.tagName !== "SELECT") b.textContent = text; }};
   show("…");
-  return fetch(path + (path.includes("?") ? "&" : "?") + "token=" + TOKEN, {{ method: "POST" }}).then(r => r.json()).then(j => {{
+  return fetch(path + (path.includes("?") ? "&" : "?") + "token=" + TOKEN, {{ method: "POST", body: data && new URLSearchParams(data) }}).then(r => r.json()).then(j => {{
     show(j.ok ? "✓" : "Failed"); b.title = j.error || "";
     setTimeout(() => show(label), 2500);
     if (j.ok) refresh();
@@ -476,9 +621,23 @@ document.addEventListener("change", ev => {{
   s.blur();
   post("/milestone/set?task=" + s.dataset.task + "&name=" + encodeURIComponent(s.value), s, s.value);
 }});
-document.getElementById("close").onclick = () => {{ panel.hidden = true; writeHash(""); }};
+document.getElementById("close").onclick = () => {{ panel.hidden = true; shown = ""; writeHash(""); }};
 document.addEventListener("click", ev => {{
-  const b = ev.target.closest("button"); if (!b) return;
+  const b = ev.target.closest("button");
+  if (!b) {{
+    // A click on the card itself, not on one of its controls or links, opens its details.
+    const card = ev.target.closest(".card");
+    if (card && !ev.target.closest("a, select, input") && !getSelection().toString()) openTask(card.id);
+    return;
+  }}
+  if (b.id === "newtask") {{ npanel.hidden = false; panel.hidden = true; shown = ""; writeHash(""); document.getElementById("ntitle").focus(); }}
+  if (b.id === "nclose") npanel.hidden = true;
+  if (b.id === "ncreate") {{
+    const title = document.getElementById("ntitle"), body = document.getElementById("nbody");
+    post("/task/new", b, "Create", {{ title: title.value, milestone: document.getElementById("nms").value, body: body.value }}).then(j => {{
+      if (j && j.ok) {{ title.value = body.value = ""; npanel.hidden = true; }}
+    }});
+  }}
   if (b.dataset.open) openTask(b.dataset.open);
   if (b.dataset.launch) post("/open?task=" + b.dataset.launch, b, "Open in Herdr");
   if (b.dataset.focus) post("/focus?task=" + b.dataset.focus, b, "needs you");

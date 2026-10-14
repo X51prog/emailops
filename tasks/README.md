@@ -34,7 +34,7 @@ Why the task exists and what it touches.
 - `issue` (optional): the GitHub issue the task comes from; the board links it.
 - Done tasks are removed by the release (`tasks.py prune-done`, release
   skill Phase 3c): git history keeps them.
-- New task: next free id, `status: todo`.
+- New task: the id after the highest one any branch ever used, `status: todo`.
 - Work on a task in its own worktree and only edit that task's file there, so
   parallel branches never conflict. `/work-on-task T-NNNN` does this.
 
@@ -55,14 +55,16 @@ Why the task exists and what it touches.
   Herdr runs here and on its saved machines, and the page updates in place
   every 5 seconds. A card with an agent says where it runs; a yellow
   **needs you** chip (agent blocked on a question, or done with its turn)
-  focuses that Herdr pane and raises the terminal. **Details** shows the
-  agent's latest output. **Open in Herdr** focuses the task's agent if there is
+  focuses that Herdr pane and raises the terminal. Each card shows the first
+  two lines of its details; clicking the card (or **Details**) opens them
+  rendered as Markdown, with the agent's latest output in a collapsed section. **Open in Herdr** focuses the task's agent if there is
   one, otherwise it creates (or reuses) the task's worktree
   `.claude/worktrees/T-NNNN-slug` on `feature/T-NNNN-slug`, opens a Herdr tab
   there, starts Claude and types `/work-on-task T-NNNN` (not sent).
-  The served board also edits: **New milestone** (appended to
-  `tasks/milestones.md`), a milestone picker on each card, and **Delete** for a
-  task nobody started (two clicks). Each edit is one commit on
+  The served board also edits: **New task** (title, milestone and Markdown
+  details), **New milestone** (appended to `tasks/milestones.md`), a milestone
+  picker on each card, and **Delete** (two clicks). Deleting a started task
+  hides it from every source but keeps its worktree, branch and agent. Each edit is one commit on
   `chore/tasks-board` (worktree `.claude/worktrees/tasks-board`, created on
   first use), or on the task's own branch once it is started; a refused commit
   (pre-commit hook) leaves the file as it was. Nothing is pushed: merge
@@ -76,4 +78,5 @@ Why the task exists and what it touches.
   board branch `chore/tasks-board` (edits made from the board), by the task's
   own worktree (uncommitted edits included) and by a pushed
   `feature/T-NNNN-*` branch with no local worktree (another machine or a
-  cloud session); the most advanced status wins.
+  cloud session); the most advanced status wins, and a deletion on the board
+  branch wins over all of them.

@@ -8,6 +8,7 @@ from task_board import (  # noqa: E402
     agent_name,
     artifact_target,
     authorized,
+    post_params,
     pick_workspace,
     raise_command,
     read_args,
@@ -169,3 +170,10 @@ def test_artifact_target_refuses_to_leave_the_artifact_folder():
         except ValueError:
             continue
         raise AssertionError(f"served {rel!r}")
+
+
+# --- post_params ------------------------------------------------------------
+
+
+def test_post_params_merge_the_query_and_the_form_body():
+    assert post_params("task=T-0001", "title=Do+a+thing&body=") == {"task": "T-0001", "title": "Do a thing", "body": ""}
