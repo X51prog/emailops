@@ -59,7 +59,7 @@ beforeEach(async () => {
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
-  await act(async () => root.render(<JunkBanner emailId="e2" accountId="a1" />));
+  await act(async () => root.render(<JunkBanner emailId="e2" accountId="a1" threadId="t-e2" mailbox="inbox" />));
 });
 
 afterEach(() => {

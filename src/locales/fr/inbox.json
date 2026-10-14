@@ -117,7 +117,8 @@
     "star": "Ajouter cette conversation aux favoris",
     "unstar": "Retirer des favoris",
     "archive": "Archiver",
-    "moveToInbox": "Déplacer vers la boîte de réception"
+    "moveToInbox": "Déplacer vers la boîte de réception",
+    "notSpam": "Pas un spam — déplacer vers la boîte de réception"
   },
   "compose": {
     "open": "Nouveau message",

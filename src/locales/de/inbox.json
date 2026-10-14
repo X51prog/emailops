@@ -117,7 +117,8 @@
     "star": "Diese Unterhaltung mit Stern markieren",
     "unstar": "Stern entfernen",
     "archive": "Archivieren",
-    "moveToInbox": "In den Posteingang verschieben"
+    "moveToInbox": "In den Posteingang verschieben",
+    "notSpam": "Kein Spam — in den Posteingang verschieben"
   },
   "compose": {
     "open": "Verfassen",

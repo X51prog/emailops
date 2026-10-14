@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import * as api from '@/lib/api';
 import { errorText } from '@/lib/errors';
 import { beginLeave, finishLeave } from '@/stores/autoAdvanceStore';
+import { useEmailStore } from '@/stores/emailStore';
 import { isFlagged, useJunkStore } from '@/stores/junkStore';
 import { useLogStore } from '@/stores/logStore';
 import { useToastStore } from '@/stores/toastStore';
@@ -11,6 +12,9 @@ import type { JunkKind, JunkReason } from '@/types';
 interface JunkBannerProps {
   emailId: string;
   accountId: string;
+  threadId: string;
+  /** Where the message is filed: in Spam, "Not junk" also takes it out. */
+  mailbox: string;
 }
 
 /**
@@ -77,7 +81,7 @@ function topReasons(reasons: JunkReason[]): HeadlineReason[] {
  * Renders nothing when the message is unscored or clean — a verdict of
  * `unknown` (no captured headers) is silence, never reassurance.
  */
-export function JunkBanner({ emailId, accountId }: JunkBannerProps) {
+export function JunkBanner({ emailId, accountId, threadId, mailbox }: JunkBannerProps) {
   const { t } = useTranslation(['inbox']);
   const verdict = useJunkStore((s) => s.verdictsByEmail[emailId]);
   const loadVerdicts = useJunkStore((s) => s.loadVerdicts);
@@ -92,7 +96,16 @@ export function JunkBanner({ emailId, accountId }: JunkBannerProps) {
   // Same error contract as "Confirm junk" below. The store writes optimistically
   // and rolls back on failure, but a rollback the user cannot see just looks
   // like the button did nothing — so the failure has to be said out loud.
+  //
+  // In Spam, "Not junk" is the not-spam thread action: it moves the
+  // conversation back to the inbox at the provider and records the
+  // correction (the store reports a refusal with a toast and rolls back).
+  // Elsewhere there is nothing to move, so only the correction is recorded.
   const handleNotJunk = useCallback(async () => {
+    if (mailbox === 'spam') {
+      await useEmailStore.getState().markThreadsNotSpam([{ accountId, threadId }]);
+      return;
+    }
     try {
       await setFeedback(accountId, emailId, false);
     } catch (err) {
@@ -100,7 +113,7 @@ export function JunkBanner({ emailId, accountId }: JunkBannerProps) {
       addLog('error', 'system', message);
       addToast({ message, sticky: true });
     }
-  }, [accountId, emailId, setFeedback, addLog, addToast, t]);
+  }, [accountId, emailId, threadId, mailbox, setFeedback, addLog, addToast, t]);
 
   // Confirming files the message in the server's Junk folder where the provider
   // supports it, so the server's own filter learns too — the detector never

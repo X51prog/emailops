@@ -117,7 +117,8 @@
     "star": "Destacar esta conversación",
     "unstar": "Quitar destacado",
     "archive": "Archivar",
-    "moveToInbox": "Mover a Recibidos"
+    "moveToInbox": "Mover a Recibidos",
+    "notSpam": "No es spam — mover a Recibidos"
   },
   "compose": {
     "open": "Redactar",

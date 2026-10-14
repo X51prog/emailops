@@ -117,7 +117,8 @@
     "star": "Star this conversation",
     "unstar": "Remove star",
     "archive": "Archive",
-    "moveToInbox": "Move to Inbox"
+    "moveToInbox": "Move to Inbox",
+    "notSpam": "Not spam — move to Inbox"
   },
   "compose": {
     "open": "Compose",
