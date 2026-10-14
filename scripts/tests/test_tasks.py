@@ -539,6 +539,10 @@ def test_milestones_sort_by_version_then_named_ones_last():
     assert sorted(names, key=milestone_key) == ["0.7.0", "0.7.1", "0.10.0", "1.0", "backlog", "later"]
 
 
+def test_a_leading_v_is_still_a_version():
+    assert sorted(["later", "v0.7.0", "0.6.16"], key=milestone_key) == ["0.6.16", "v0.7.0", "later"]
+
+
 def test_column_lists_tasks_from_the_lowest_milestone_up():
     tasks = [task("T-0001", milestone="later"), task("T-0002", milestone="0.10.0"), task("T-0003", milestone="0.7.0"), task("T-0004", milestone="0.7.0")]
     html = render(tasks)

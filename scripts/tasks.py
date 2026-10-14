@@ -296,9 +296,9 @@ def excerpt(body):
 
 
 def milestone_key(name):
-    """Sort key: versions (0.7.0 < 0.10.0) in numeric order, then named milestones (later). Pure."""
-    if re.fullmatch(r"\d+(?:\.\d+)*", name):
-        return (0, tuple(int(n) for n in name.split(".")), "")
+    """Sort key: versions (0.7.0 < v0.10.0) in numeric order, then named milestones (later). Pure."""
+    if re.fullmatch(r"v?\d+(?:\.\d+)*", name):
+        return (0, tuple(int(n) for n in name.lstrip("v").split(".")), "")
     return (1, (), name)
 
 
