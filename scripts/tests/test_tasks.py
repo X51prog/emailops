@@ -10,6 +10,7 @@ from tasks import (  # noqa: E402
     WorktreeInfo,
     deep_link,
     is_active,
+    loss_text,
     add_artifact,
     add_milestone,
     agents_by_task,
@@ -548,3 +549,34 @@ def test_column_lists_tasks_from_the_lowest_milestone_up():
     html = render(tasks)
     order = sorted(["T-0001", "T-0002", "T-0003", "T-0004"], key=lambda i: html.index(f'id="{i}"'))
     assert order == ["T-0003", "T-0004", "T-0002", "T-0001"]
+
+
+# --- discarding a task's worktree ------------------------------------------------
+
+
+def local_wt(dirty=2, ahead=1, branch="feature/T-0001-x"):
+    return {"T-0001-x": WorktreeInfo(name="T-0001-x", branch=branch, last_commit="1h ago · x", dirty=dirty, ahead=ahead, idle_min=3, agent=False)}
+
+
+def test_loss_text_says_what_a_discard_throws_away():
+    assert loss_text(local_wt()["T-0001-x"]) == "2 changed files and 1 commit not on origin/main"
+    assert loss_text(local_wt(dirty=0, ahead=3)["T-0001-x"]) == "3 commits not on origin/main"
+    assert loss_text(local_wt(dirty=0, ahead=0)["T-0001-x"]) == "nothing unsaved"
+
+
+def test_a_card_with_a_local_worktree_can_discard_it():
+    html = render([task(status="doing", worktree="T-0001-x")], local_wt(), token="tok")
+    assert 'data-discard="T-0001" data-loss="2 changed files and 1 commit not on origin/main"' in html
+    assert "data-discard" not in render([task(status="doing", worktree="T-0001-x")], local_wt())
+
+
+def test_a_card_without_a_local_worktree_has_no_discard():
+    remote = {"origin/feature/T-0001-x": WorktreeInfo(name="origin/feature/T-0001-x", branch="feature/T-0001-x", last_commit="x", dirty=0, ahead=2, idle_min=60, agent=False, remote=True)}
+    assert "data-discard" not in render([task(status="doing", worktree="origin/feature/T-0001-x")], remote, token="tok")
+    assert "data-discard" not in render([task()], token="tok")
+
+
+def test_a_deleted_task_whose_worktree_remains_is_listed_with_discard():
+    html = render([task("T-0002")], local_wt(dirty=0, ahead=0), token="tok")
+    assert "T-0001 was deleted" in html
+    assert 'data-discard="T-0001" data-loss="nothing unsaved"' in html

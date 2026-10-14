@@ -66,7 +66,14 @@ Why the task exists and what it touches.
   The served board also edits: **New task** (title, milestone and Markdown
   details), **New milestone** (appended to `tasks/milestones.md`), a milestone
   picker on each card, and **Delete** (two clicks). Deleting a started task
-  hides it from every source but keeps its worktree, branch and agent. Each edit is one commit on
+  hides it from every source but keeps its worktree, branch and agent.
+  **Discard worktree** (on a card with a worktree here, or next to the note
+  about a deleted task whose worktree remains) removes everything of the task
+  on this machine: the card, the Herdr panes inside the worktree, the worktree
+  with its uncommitted work, and the local branch. The confirming click names
+  what is lost (changed files, commits not on `origin/main`). A pushed branch
+  and its PR stay: delete them on GitHub. `make disk-clean ARGS="--apply"`
+  frees the build directory the worktree leaves behind. Each edit is one commit on
   `chore/tasks-board` (worktree `.claude/worktrees/tasks-board`, created on
   first use), or on the task's own branch once it is started; a refused commit
   (pre-commit hook) leaves the file as it was. Nothing is pushed: merge

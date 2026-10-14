@@ -365,6 +365,20 @@ def task_of_path(path):
     return m.group(1) if m else None
 
 
+def loss_text(wt):
+    """What discarding this worktree throws away, for the confirmation. Pure."""
+    parts = []
+    if wt.dirty:
+        parts.append(f"{wt.dirty} changed file{'s' if wt.dirty != 1 else ''}")
+    if wt.ahead:
+        parts.append(f"{wt.ahead} commit{'s' if wt.ahead != 1 else ''} not on origin/main")
+    return " and ".join(parts) or "nothing unsaved"
+
+
+def discard_button(task_id, wt):
+    return f'<button class="btn danger" data-discard="{html.escape(task_id)}" data-loss="{html.escape(loss_text(wt))}">Discard worktree</button>'
+
+
 def needs_you(status):
     return status in NEEDS_YOU
 
@@ -445,6 +459,8 @@ def render_html(tasks, worktrees, repo, generated, warnings=(), token=None, mile
             text = excerpt(t.body)
             summary = f'<p class="excerpt">{e(text)}</p>' if text else ""
             delete = f'<button class="btn danger" data-delete="{e(t.id)}">Delete</button>'
+            if wt is not None and not wt.remote and t.worktree not in (MAIN, BOARD):
+                delete += discard_button(t.id, wt)
             if token:
                 launch = f'<button class="btn primary" data-launch="{e(t.id)}">Open in Herdr</button>'
             else:
@@ -466,6 +482,13 @@ def render_html(tasks, worktrees, repo, generated, warnings=(), token=None, mile
         )
     options = "".join(f'<option value="{e(m)}">{e(m)}</option>' for m in milestones)
     notes = "".join(f'<p class="warn">{e(w)}</p>' for w in warnings)
+    ids = {t.id for t in tasks}
+    for wt in worktrees.values():
+        m = TASK_BRANCH_RE.match(wt.branch)
+        if not wt.remote and m and m.group(1) not in ids:
+            button = discard_button(m.group(1), wt) if token else ""
+            notes += f'<p class="warn">{e(m.group(1))} was deleted; its worktree <code>{e(wt.branch)}</code> is still here. {button}</p>'
+
     new_ms = (
         '<button class="btn primary" id="newtask">New task</button>'
         '<input id="newms" placeholder="New milestone" maxlength="32"><button class="btn" id="addms">Add</button>'
@@ -491,6 +514,7 @@ STATIC_JS = "function refresh() {}\nsetInterval(() => { if (document.activeEleme
 SERVE_JS = """async function refresh() {
   // Not while the reader types or picks: swapping the board would drop the control.
   if (["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
+  if (document.querySelector("[data-armed]")) return;  // a delete or discard waiting for its confirming click
   try {
     const r = await fetch("/?token=" + TOKEN, { cache: "no-store" });
     if (!r.ok) throw new Error(r.status);
@@ -652,6 +676,11 @@ document.addEventListener("click", ev => {{
     // Two clicks: the first arms the button for a few seconds.
     if (!b.dataset.armed) {{ b.dataset.armed = "1"; b.textContent = "Confirm delete"; setTimeout(() => {{ delete b.dataset.armed; b.textContent = "Delete"; }}, 4000); }}
     else post("/delete?task=" + b.dataset.delete, b, "Delete");
+  }}
+  if (b.dataset.discard) {{
+    // Removes the worktree with its uncommitted work and the local branch: the confirming click names what goes.
+    if (!b.dataset.armed) {{ b.dataset.armed = "1"; b.textContent = "Discard " + b.dataset.loss + "?"; setTimeout(() => {{ delete b.dataset.armed; b.textContent = "Discard worktree"; }}, 5000); }}
+    else {{ delete b.dataset.armed; post("/discard?task=" + b.dataset.discard, b, "Discard worktree"); }}
   }}
   if (b.id === "addms") {{
     const input = document.getElementById("newms");

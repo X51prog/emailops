@@ -47,6 +47,7 @@ from tasks import (
     BOARD_BRANCH,
     ID_RE,
     TASK_BASE,
+    TASK_BRANCH_RE,
     add_milestone,
     agents_by_task,
     build_page,
@@ -60,6 +61,7 @@ from tasks import (
     read_milestones,
     set_field,
     slugify,
+    task_of_path,
     worktrees,
 )
 
@@ -108,6 +110,24 @@ def post_params(query, body):
     params = {k: v[0] for k, v in parse_qs(query).items()}
     params.update({k: v[0] for k, v in parse_qs(body, keep_blank_values=True).items()})
     return params
+
+
+def panes_in(panes, task_id):
+    """Herdr pane ids whose shell sits inside the task's worktree. Pure."""
+    return [p["pane_id"] for p in panes if task_id in (task_of_path(p.get("foreground_cwd") or ""), task_of_path(p.get("cwd") or ""))]
+
+
+def task_checkout(task_id, trees):
+    """(path, branch) of the task's worktree under .claude/worktrees, else None. Pure.
+
+    Both the branch and the directory must name the task: a task branch checked
+    out anywhere else (the main checkout) is never a candidate for removal.
+    """
+    for path, branch in trees:
+        m = TASK_BRANCH_RE.match(branch)
+        if m and m.group(1) == task_id and task_of_path(str(path)) == task_id:
+            return path, branch
+    return None
 
 
 def artifact_target(artifact, rel):
@@ -312,11 +332,42 @@ def delete_task(query):
     discards code.
     """
     root, task, _ = find_task(query.get("task", ""))
+    remove_card(root, task)
+
+
+def remove_card(root, task):
     board = board_worktree(root)
     if not (board / "tasks" / task.file).exists():
         raise ValueError(f"{task.id} exists only in {task.worktree}; delete it there")
     git("rm", "-q", f"tasks/{task.file}", cwd=board)
     commit(board, f"tasks/{task.file}", f"chore: delete {task.id}")
+
+
+def discard_task(query):
+    """Remove everything of a task on this machine: card, Herdr panes, worktree (uncommitted work too), local branch.
+
+    A pushed branch and its PR stay: removing those changes GitHub.
+    """
+    task_id = query.get("task", "")
+    if not ID_RE.match(task_id):
+        raise ValueError(f"not a task id: {task_id!r}")
+    found = task_checkout(task_id, worktrees())
+    if found is None:
+        raise ValueError(f"{task_id} has no worktree on this machine")
+    path, branch = found
+    root, tasks = collect()[:2]
+    task = next((t for t in tasks if t.id == task_id), None)
+    if task is not None:
+        remove_card(root, task)
+    try:
+        panes = herdr("pane", "list")["result"]["panes"]
+    except (OSError, RuntimeError) as err:
+        print(f"discard {task_id}: Herdr unavailable, no panes closed: {err}", file=sys.stderr)
+        panes = []
+    for pane in panes_in(panes, task_id):
+        herdr("pane", "close", pane)
+    git("worktree", "remove", "--force", str(path))
+    git("branch", "-D", branch)
 
 
 def open_in_herdr(task_id):
@@ -361,6 +412,7 @@ def serve(port):
         "/milestone/set": set_milestone,
         "/delete": delete_task,
         "/task/new": new_task,
+        "/discard": discard_task,
     }
 
     class Handler(BaseHTTPRequestHandler):

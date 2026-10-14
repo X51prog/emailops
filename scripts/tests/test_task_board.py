@@ -8,10 +8,12 @@ from task_board import (  # noqa: E402
     agent_name,
     artifact_target,
     authorized,
+    panes_in,
     post_params,
     pick_workspace,
     raise_command,
     read_args,
+    task_checkout,
     task_worktree,
     terminal_of,
 )
@@ -177,3 +179,31 @@ def test_artifact_target_refuses_to_leave_the_artifact_folder():
 
 def test_post_params_merge_the_query_and_the_form_body():
     assert post_params("task=T-0001", "title=Do+a+thing&body=") == {"task": "T-0001", "title": "Do a thing", "body": ""}
+
+
+# --- discard ------------------------------------------------------------------
+
+
+def test_panes_in_finds_every_pane_inside_the_task_worktree():
+    panes = [
+        {"pane_id": "p1", "cwd": "/r/.claude/worktrees/T-0002-x", "foreground_cwd": "/r/.claude/worktrees/T-0002-x/src"},
+        {"pane_id": "p2", "cwd": "/r/.claude/worktrees/T-0002-x", "foreground_cwd": None},
+        {"pane_id": "p3", "cwd": "/r", "foreground_cwd": "/r"},
+        {"pane_id": "p4", "cwd": "/r/.claude/worktrees/T-0020-y", "foreground_cwd": None},
+    ]
+    assert panes_in(panes, "T-0002") == ["p1", "p2"]
+
+
+def test_task_checkout_picks_only_the_task_worktree():
+    trees = [
+        (pathlib.Path("/r"), "main"),
+        (pathlib.Path("/r/.claude/worktrees/tasks-board"), "chore/tasks-board"),
+        (pathlib.Path("/r/.claude/worktrees/T-0002-x"), "feature/T-0002-x"),
+    ]
+    assert task_checkout("T-0002", trees) == (pathlib.Path("/r/.claude/worktrees/T-0002-x"), "feature/T-0002-x")
+    assert task_checkout("T-0003", trees) is None
+
+
+def test_task_checkout_ignores_a_task_branch_checked_out_outside_the_worktrees_dir():
+    # The main checkout on a task branch must never be removed.
+    assert task_checkout("T-0002", [(pathlib.Path("/r"), "feature/T-0002-x")]) is None
