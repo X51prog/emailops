@@ -117,7 +117,8 @@
     "star": "Destacar esta conversación",
     "unstar": "Quitar destacado",
     "archive": "Archivar",
-    "moveToInbox": "Mover a Recibidos"
+    "moveToInbox": "Mover a Recibidos",
+    "notSpam": "No es spam — mover a Recibidos"
   },
   "compose": {
     "open": "Redactar",
@@ -202,6 +203,8 @@
       "archive_other": "No se pudieron archivar {{count}} conversaciones: {{detail}}",
       "moveToInbox_one": "No se pudo mover {{count}} conversación a Recibidos: {{detail}}",
       "moveToInbox_other": "No se pudieron mover {{count}} conversaciones a Recibidos: {{detail}}",
+      "notSpam_one": "No se pudo sacar de spam {{count}} conversación: {{detail}}",
+      "notSpam_other": "No se pudieron sacar de spam {{count}} conversaciones: {{detail}}",
       "delete_one": "No se pudo eliminar {{count}} conversación: {{detail}}",
       "delete_other": "No se pudieron eliminar {{count}} conversaciones: {{detail}}"
     }

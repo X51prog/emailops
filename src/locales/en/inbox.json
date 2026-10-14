@@ -117,7 +117,8 @@
     "star": "Star this conversation",
     "unstar": "Remove star",
     "archive": "Archive",
-    "moveToInbox": "Move to Inbox"
+    "moveToInbox": "Move to Inbox",
+    "notSpam": "Not spam — move to Inbox"
   },
   "compose": {
     "open": "Compose",
@@ -202,6 +203,8 @@
       "archive_other": "Could not archive {{count}} conversations: {{detail}}",
       "moveToInbox_one": "Could not move {{count}} conversation to the inbox: {{detail}}",
       "moveToInbox_other": "Could not move {{count}} conversations to the inbox: {{detail}}",
+      "notSpam_one": "Could not move {{count}} conversation out of spam: {{detail}}",
+      "notSpam_other": "Could not move {{count}} conversations out of spam: {{detail}}",
       "delete_one": "Could not delete {{count}} conversation: {{detail}}",
       "delete_other": "Could not delete {{count}} conversations: {{detail}}"
     }

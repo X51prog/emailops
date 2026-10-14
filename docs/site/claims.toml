@@ -1258,6 +1258,7 @@ checks = [
 [priv-what-emailops-1]
 checks = [
   { tests = ['services::emails::mailbox_state::tests::mark_read_updates_the_row_and_pushes_to_the_provider', 'services::emails::compose::tests::delete_draft_removes_local_and_provider_copies'], covers = ["Marking a message read or unread", "Saving a draft"] },
+  { tests = ['services::emails::thread_actions::tests::not_spam_moves_the_spam_messages_to_the_inbox_and_records_not_junk', 'services::emails::thread_actions::tests::not_spam_records_not_junk_under_the_id_the_provider_gave_the_message'], covers = ["The message moves back to the account's inbox"] },
   { manual = 'Moves, Confirm junk and folder changes writing to the account need a real provider; the demo accounts are offline.' },
 ]
 fix = 'Every action that writes to the account must be in this table: if one was added or removed, update the rows in all four languages.'

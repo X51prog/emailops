@@ -130,6 +130,7 @@ export function EmailView({
   const setThreadsStarred = useEmailStore((s) => s.setThreadsStarred);
   const archiveThreads = useEmailStore((s) => s.archiveThreads);
   const moveThreadsToInbox = useEmailStore((s) => s.moveThreadsToInbox);
+  const markThreadsNotSpam = useEmailStore((s) => s.markThreadsNotSpam);
   const snoozeThreads = useEmailStore((s) => s.snoozeThreads);
   const unsnoozeThreads = useEmailStore((s) => s.unsnoozeThreads);
   const threadSnoozed = useEmailStore((s) => threadEmails.length > 0 && isSnoozed(s.snoozes, threadEmails[0]));
@@ -722,6 +723,10 @@ export function EmailView({
                 void moveThreadsToInbox([threadRefOf(latestEmail)]);
                 onClose();
               }}
+              onNotSpam={() => {
+                void markThreadsNotSpam([threadRefOf(latestEmail)]);
+                onClose();
+              }}
               onMarkUnread={markUnread}
               onMarkRead={() => void setThreadsRead([threadRefOf(latestEmail)], true)}
               onToggleStar={(starred) => void setThreadsStarred([threadRefOf(latestEmail)], starred)}
@@ -1027,10 +1032,27 @@ export function EmailView({
   );
 }
 
+/** Pure: which mailbox actions a conversation offers, from where its
+ *  messages are filed. A conversation in Spam offers "Not spam" whether or
+ *  not the junk detector flagged it — the server may have filed it there. */
+export function threadMailboxState(emails: Pick<Email, 'mailbox'>[]): {
+  inInbox: boolean;
+  archived: boolean;
+  inSpam: boolean;
+} {
+  const inInbox = emails.some((e) => e.mailbox === 'inbox');
+  return {
+    inInbox,
+    archived: !inInbox && emails.some((e) => e.mailbox === 'archive'),
+    inSpam: emails.some((e) => e.mailbox === 'spam'),
+  };
+}
+
 interface ThreadToolbarActionsProps {
   threadEmails: Email[];
   onArchive: () => void;
   onMoveToInbox: () => void;
+  onNotSpam: () => void;
   onMarkUnread: () => void;
   onMarkRead: () => void;
   onToggleStar: (starred: boolean) => void;
@@ -1049,6 +1071,7 @@ function ThreadToolbarActions({
   threadEmails,
   onArchive,
   onMoveToInbox,
+  onNotSpam,
   onMarkUnread,
   onMarkRead,
   onToggleStar,
@@ -1061,8 +1084,7 @@ function ThreadToolbarActions({
   const hint = useShortcutHint();
   const starred = isThreadStarred(threadEmails);
   const unread = isThreadUnread(threadEmails);
-  const inInbox = threadEmails.some((e) => e.mailbox === 'inbox');
-  const archived = !inInbox && threadEmails.some((e) => e.mailbox === 'archive');
+  const { inInbox, archived, inSpam } = threadMailboxState(threadEmails);
   const buttonClass = 'p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors';
   return (
     <>
@@ -1077,6 +1099,11 @@ function ThreadToolbarActions({
       )}
       {archived && (
         <button onClick={onMoveToInbox} className={buttonClass} title={t('inbox:emailView.moveToInbox')}>
+          <InboxIcon className="w-4 h-4" />
+        </button>
+      )}
+      {inSpam && (
+        <button onClick={onNotSpam} className={buttonClass} title={t('inbox:emailView.notSpam')}>
           <InboxIcon className="w-4 h-4" />
         </button>
       )}

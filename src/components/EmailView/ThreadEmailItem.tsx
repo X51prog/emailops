@@ -161,7 +161,12 @@ export function ThreadEmailItem({
           <>
             {/* Above everything else in the message: a warning about what the
                 message IS has to be read before the message itself. */}
-            <JunkBanner emailId={email.id} accountId={email.accountId} />
+            <JunkBanner
+              emailId={email.id}
+              accountId={email.accountId}
+              threadId={email.threadId}
+              mailbox={email.mailbox}
+            />
             {!email.isSent && <SenderBanner accountId={email.accountId} emailId={email.id} />}
             {translationEnabled && aiEnabled && <TranslationControls accountId={email.accountId} emailId={email.id} />}
             {showTranslated && translation ? (

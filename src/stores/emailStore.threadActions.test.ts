@@ -28,6 +28,8 @@ import {
   UNDO_WINDOW_MS,
   useEmailStore,
 } from './emailStore';
+import { isFlagged, useJunkStore } from './junkStore';
+import { useTagStore } from './tagStore';
 import { useToastStore } from './toastStore';
 
 function email(id: string, threadId: string, extra: Partial<Email> = {}): Email {
@@ -162,6 +164,9 @@ describe('leavesList', () => {
     ['delete', 'inbox', true],
     ['delete', 'starred', true],
     ['delete', 'search', true],
+    ['notSpam', 'spam', true],
+    ['notSpam', 'inbox', false],
+    ['notSpam', 'search', false],
   ] as const)('%s in the %s list → %s', (action, list, expected) => {
     expect(leavesList(action, list)).toBe(expected);
   });
@@ -207,6 +212,83 @@ describe('thread action store actions', () => {
     const state = useEmailStore.getState();
     expect(state.emails[0].isStarred).toBe(true);
     expect(state.selectedEmail?.id).toBe('a');
+  });
+
+  it('not spam moves the spam rows to the inbox and leaves the Spam list', async () => {
+    vi.mocked(api.applyThreadAction).mockResolvedValue({ failed: [] });
+    useEmailStore.setState({
+      listScope: 'spam',
+      emails: [email('s1', 't1', { mailbox: 'spam' }), email('s2', 't2', { mailbox: 'spam' })],
+      totalCount: 2,
+    });
+
+    await useEmailStore.getState().markThreadsNotSpam([{ accountId: 'acc', threadId: 't1' }]);
+
+    expect(api.applyThreadAction).toHaveBeenCalledWith([{ accountId: 'acc', threadId: 't1' }], 'notSpam');
+    expect(useEmailStore.getState().emails.map((e) => e.id)).toEqual(['s2']);
+  });
+
+  it('a refused not-spam puts the conversation back in the Spam list with a toast', async () => {
+    vi.mocked(api.applyThreadAction).mockResolvedValue({
+      failed: [{ accountId: 'acc', threadId: 't1', code: 'sync', params: {}, message: 'offline' }],
+    });
+    useEmailStore.setState({
+      listScope: 'spam',
+      emails: [email('s1', 't1', { mailbox: 'spam' })],
+      totalCount: 1,
+    });
+
+    await useEmailStore.getState().markThreadsNotSpam([{ accountId: 'acc', threadId: 't1' }]);
+
+    expect(useEmailStore.getState().emails.map((e) => [e.id, e.mailbox])).toEqual([['s1', 'spam']]);
+    expect(useToastStore.getState().toasts).toHaveLength(1);
+  });
+
+  function flagAsJunk(id: string) {
+    useJunkStore.setState({
+      verdictsByEmail: {
+        [id]: { emailId: id, band: 'junk', primaryKind: 'spam', reasons: [], userOverride: null } as never,
+      },
+    });
+    useTagStore.setState({
+      tagsByEmail: { [id]: [{ emailId: id, tagType: 'junk', tagValue: 'spam', confidence: null, createdAt: 1 }] },
+    });
+  }
+
+  it('a not-spam that succeeds clears the junk flag of a message that keeps its id', async () => {
+    vi.mocked(api.applyThreadAction).mockResolvedValue({ failed: [] });
+    flagAsJunk('s1');
+    useEmailStore.setState({ listScope: 'spam', emails: [email('s1', 't1', { mailbox: 'spam' })], totalCount: 1 });
+
+    await useEmailStore.getState().markThreadsNotSpam([{ accountId: 'acc', threadId: 't1' }]);
+
+    expect(isFlagged(useJunkStore.getState().verdictsByEmail.s1)).toBe(false);
+    expect(useTagStore.getState().tagsByEmail.s1).toEqual([]);
+  });
+
+  it('a refused not-spam keeps the junk flag', async () => {
+    vi.mocked(api.applyThreadAction).mockResolvedValue({
+      failed: [{ accountId: 'acc', threadId: 't1', code: 'sync', params: {}, message: 'offline' }],
+    });
+    flagAsJunk('s1');
+    useEmailStore.setState({ listScope: 'spam', emails: [email('s1', 't1', { mailbox: 'spam' })], totalCount: 1 });
+
+    await useEmailStore.getState().markThreadsNotSpam([{ accountId: 'acc', threadId: 't1' }]);
+
+    expect(isFlagged(useJunkStore.getState().verdictsByEmail.s1)).toBe(true);
+  });
+
+  it('not spam also moves the messages of the open conversation', async () => {
+    vi.mocked(api.applyThreadAction).mockResolvedValue({ failed: [] });
+    const junk = email('s1', 't1', { mailbox: 'spam' });
+    const kept = email('i1', 't1', { mailbox: 'inbox' });
+    useEmailStore.setState({ listScope: 'search', emails: [kept], threadEmails: [kept, junk], selectedEmail: junk });
+
+    await useEmailStore.getState().markThreadsNotSpam([{ accountId: 'acc', threadId: 't1' }]);
+
+    const state = useEmailStore.getState();
+    expect(state.threadEmails.map((e) => e.mailbox)).toEqual(['inbox', 'inbox']);
+    expect(state.selectedEmail?.mailbox).toBe('inbox');
   });
 
   it('an empty selection does nothing', async () => {

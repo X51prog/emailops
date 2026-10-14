@@ -314,7 +314,8 @@ Junk“) trainieren den Filter mit der Zeit. Sie entscheiden, was mit markierter
 
 <!-- claim:feat-junk-bulk-4 -->
 Keine der beiden Optionen verschiebt oder löscht etwas auf dem Server; das tut nur ein
-ausdrückliches **Als Spam bestätigen** oder **Absender blockieren**. Eine optionale Warnung vor Identitätsmissbrauch/Phishing
+ausdrückliches **Als Spam bestätigen**, **Absender blockieren** oder **Kein Spam** bei einer
+Nachricht in **Spam** — Letzteres verschiebt die Unterhaltung zurück in den Posteingang. Eine optionale Warnung vor Identitätsmissbrauch/Phishing
 ist verfügbar und standardmäßig aus.
 
 ## Abbestellen und Absender blockieren {#unsubscribe-and-block-sender}

@@ -308,7 +308,8 @@ es basura") entrenan el filtro con el tiempo. Tú decides qué pasa con el corre
 
 <!-- claim:feat-junk-bulk-4 -->
 Ninguna de las dos opciones mueve ni borra nada en el servidor; solo lo hace un **Confirmar
-basura** o un **Bloquear remitente** explícito. Hay un aviso opcional de suplantación/phishing, desactivado por defecto.
+basura**, un **Bloquear remitente** o un **No es basura** explícito sobre un mensaje en
+**Spam**; este último devuelve la conversación a la bandeja de entrada. Hay un aviso opcional de suplantación/phishing, desactivado por defecto.
 
 ## Cancelar suscripciones y bloquear remitentes {#unsubscribe-and-block-sender}
 

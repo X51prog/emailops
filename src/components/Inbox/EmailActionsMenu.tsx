@@ -93,6 +93,7 @@ export function EmailActionsMenu({
   const setThreadsStarred = useEmailStore((s) => s.setThreadsStarred);
   const archiveThreads = useEmailStore((s) => s.archiveThreads);
   const moveThreadsToInbox = useEmailStore((s) => s.moveThreadsToInbox);
+  const markThreadsNotSpam = useEmailStore((s) => s.markThreadsNotSpam);
   const snoozeThreads = useEmailStore((s) => s.snoozeThreads);
   const unsnoozeThreads = useEmailStore((s) => s.unsnoozeThreads);
   const snoozed = useEmailStore((s) => isSnoozed(s.snoozes, email));
@@ -312,6 +313,7 @@ export function EmailActionsMenu({
                   onStar={(starred) => setThreadsStarred([threadRefOf(email)], starred)}
                   onArchive={() => archiveThreads([threadRefOf(email)])}
                   onMoveToInbox={() => moveThreadsToInbox([threadRefOf(email)])}
+                  onNotSpam={() => markThreadsNotSpam([threadRefOf(email)])}
                   snoozed={snoozed}
                   onSnooze={() => setMenuView('snooze')}
                   onUnsnooze={() => unsnoozeThreads([threadRefOf(email)])}
@@ -546,6 +548,7 @@ interface ThreadActionItemsProps {
   onStar: (starred: boolean) => Promise<void>;
   onArchive: () => Promise<void>;
   onMoveToInbox: () => Promise<void>;
+  onNotSpam: () => Promise<void>;
   /** The row's conversation is snoozed (the Snoozed view lists it). */
   snoozed: boolean;
   /** Open the snooze-times page of the menu. */
@@ -563,6 +566,7 @@ function ThreadActionItems({
   onStar,
   onArchive,
   onMoveToInbox,
+  onNotSpam,
   snoozed,
   onSnooze,
   onUnsnooze,
@@ -648,6 +652,18 @@ function ThreadActionItems({
         >
           <InboxIcon className="w-4 h-4 text-gray-400" />
           {t('inbox:emailRow.moveArchivedToInbox')}
+        </button>
+      )}
+      {email.mailbox === 'spam' && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onPick(onNotSpam);
+          }}
+          className={itemClass}
+        >
+          <InboxIcon className="w-4 h-4 text-gray-400" />
+          {t('inbox:emailView.notSpam')}
         </button>
       )}
     </>
