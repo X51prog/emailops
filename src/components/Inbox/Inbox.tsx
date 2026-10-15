@@ -484,7 +484,10 @@ export function Inbox({
         ) : (
           <div className="flex items-center gap-2">
             {/* Title */}
-            <div className="flex items-center gap-1.5 flex-shrink-0 max-w-[45%] min-w-0">
+            {/* The title gives way before the search: it truncates, the
+                search keeps room to type (the header also holds the
+                All / Unread toggle and Load more). */}
+            <div className="flex items-center gap-1.5 max-w-[45%] min-w-0">
               <h2 className="text-lg font-semibold text-gray-900 truncate">
                 {title ?? (accountName ? `Inbox — ${accountName}` : 'Inbox')}
               </h2>
@@ -497,7 +500,7 @@ export function Inbox({
                 Only shown in full-width layout. In split layout the lateral
                 search bar is used instead, so we hide this to avoid duplication. */}
             {fullWidth && (
-              <div className="flex-1 flex justify-center min-w-0">
+              <div className="flex-1 flex justify-center min-w-[10rem]">
                 <InboxSearchBox
                   accountId={isUnified ? autocompleteAccountId : accountId}
                   externalQuery={searchQuery ?? ''}
