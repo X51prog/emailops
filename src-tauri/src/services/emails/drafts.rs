@@ -56,8 +56,13 @@ pub enum DraftKind {
 /// Who signs the draft.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SignOff {
-    /// No signature applies: the prompt is exactly what it always was.
-    Unchanged,
+    /// No signature applies: the model signs with the sender's first name.
+    /// Named in the prompt because nothing else tells the model who sends a
+    /// new email, and without it it writes a "[Your name]" placeholder.
+    FirstName { first_name: String },
+    /// No signature applies and the account has no display name: a closing
+    /// line only.
+    ClosingOnly,
     /// The app adds the account's signature below the draft: the model must
     /// not sign it again. `sender_name` is the account's display name, named
     /// in the rule because small models ignore "the sender's name" in the
@@ -82,36 +87,56 @@ write {whose}, a title, contact details or a [Your name] placeholder after it.\n
     )
 }
 
+/// The per-draft sign-off rule for any [`SignOff`]. Pure. Goes in the
+/// per-draft part of the prompt, never the cached prefix.
+fn sign_off_rule(sign_off: &SignOff) -> String {
+    match sign_off {
+        SignOff::AppSignature { sender_name } => app_signature_rule(sender_name),
+        SignOff::FirstName { first_name } => format!(
+            "Sign-off: end with a closing line (such as \"Best regards,\" in the email's language) \
+followed by the sender's first name, \"{first_name}\", on its own line: never write a [Your name] \
+placeholder instead.\n\n"
+        ),
+        SignOff::ClosingOnly => "Sign-off: end with a closing line only (such as \"Best regards,\" in the \
+email's language) and stop there: the sender's name is unknown, so never write a [Your name] \
+placeholder after it.\n\n"
+            .to_string(),
+    }
+}
+
 /// Decide who signs a draft. Pure: the app does when the sending account has
-/// a non-empty signature switched on for this kind of message.
+/// a non-empty signature switched on for this kind of message; otherwise the
+/// model signs with the first word of `sender_name`, or with a closing line
+/// only when it is blank.
 pub fn plan_sign_off(signature: Option<&AccountSignature>, kind: DraftKind, sender_name: &str) -> SignOff {
-    let Some(sig) = signature else {
-        return SignOff::Unchanged;
-    };
-    let enabled = match kind {
-        DraftKind::New => sig.use_for_new,
-        DraftKind::Reply => sig.use_for_replies,
-    };
-    if enabled && !sig.html.trim().is_empty() {
-        SignOff::AppSignature {
+    let app_signs = signature.is_some_and(|sig| {
+        let enabled = match kind {
+            DraftKind::New => sig.use_for_new,
+            DraftKind::Reply => sig.use_for_replies,
+        };
+        enabled && !sig.html.trim().is_empty()
+    });
+    if app_signs {
+        return SignOff::AppSignature {
             sender_name: sender_name.to_string(),
-        }
-    } else {
-        SignOff::Unchanged
+        };
+    }
+    match sender_name.split_whitespace().next() {
+        Some(first) => SignOff::FirstName {
+            first_name: first.to_string(),
+        },
+        None => SignOff::ClosingOnly,
     }
 }
 
 /// The per-draft section that fills `{instructions}`: the user's instructions
-/// and, when the app signs, the sign-off rule. Pure. Empty (and so the prompt
-/// unchanged) with neither.
+/// and the sign-off rule. Pure.
 fn per_draft_section(instructions: Option<&str>, sign_off: &SignOff) -> String {
     let mut section = match instructions {
         Some(i) if !i.trim().is_empty() => format!("Additional instructions: {}\n\n", i.trim()),
         _ => String::new(),
     };
-    if let SignOff::AppSignature { sender_name } = sign_off {
-        section.push_str(&app_signature_rule(sender_name));
-    }
+    section.push_str(&sign_off_rule(sign_off));
     section
 }
 
@@ -188,9 +213,11 @@ pub async fn generate_draft(db: &Arc<Database>, email_id: &str, instructions: Op
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| DEFAULT_PROMPT_TEMPLATE.to_string());
 
-    let (user_email, user_name) = db
-        .get_account(&email.account_id)?
-        .map(|a| (a.email, a.name))
+    let account = db.get_account(&email.account_id)?;
+    let user_email = account.as_ref().map(|a| a.email.clone()).unwrap_or_default();
+    let user_name = account
+        .as_ref()
+        .and_then(crate::services::accounts::sender_display_name)
         .unwrap_or_default();
 
     emit_log(
@@ -225,7 +252,7 @@ pub async fn generate_draft(db: &Arc<Database>, email_id: &str, instructions: Op
     let sign_off = plan_sign_off(
         load_signature(db, &email.account_id).as_ref(),
         DraftKind::Reply,
-        &user_name,
+        user_name,
     );
     let prompt = plan_reply_prompt(&ReplyPromptInput {
         template: &prompt_template,
@@ -379,8 +406,12 @@ pub async fn generate_new_draft(
     );
 
     // The app signs when the account's signature is on for new messages.
-    let sender_name = db.get_account(account_id)?.map(|a| a.name).unwrap_or_default();
-    let sign_off = plan_sign_off(load_signature(db, account_id).as_ref(), DraftKind::New, &sender_name);
+    let account = db.get_account(account_id)?;
+    let sender_name = account
+        .as_ref()
+        .and_then(crate::services::accounts::sender_display_name)
+        .unwrap_or_default();
+    let sign_off = plan_sign_off(load_signature(db, account_id).as_ref(), DraftKind::New, sender_name);
     let instructions_section = per_draft_section(instructions, &sign_off);
 
     // Honor the user's explicit AI output language (ai_output_language_v2 →
@@ -602,15 +633,12 @@ fn plan_reply_prompt(input: &ReplyPromptInput<'_>) -> ReplyPrompt {
         .replace("{instructions}", &instructions_section);
     // A custom template without `{instructions}` would drop the sign-off
     // rule silently: append it, after the cached prefix. (Its user
-    // instructions keep their old behaviour, so an account without a
-    // signature gets exactly the prompt it had.)
-    if let SignOff::AppSignature { sender_name } = &input.sign_off {
-        if !suffix_template.contains("{instructions}") {
-            if !suffix.is_empty() && !suffix.ends_with('\n') {
-                suffix.push_str("\n\n");
-            }
-            suffix.push_str(&app_signature_rule(sender_name));
+    // instructions keep their old behaviour.)
+    if !suffix_template.contains("{instructions}") {
+        if !suffix.is_empty() && !suffix.ends_with('\n') {
+            suffix.push_str("\n\n");
         }
+        suffix.push_str(&sign_off_rule(&input.sign_off));
     }
 
     ReplyPrompt {
@@ -1193,7 +1221,7 @@ mod tests {
     }
 
     fn plan(thread: &[ThreadMessage], rag: &str, instructions: Option<&str>) -> ReplyPrompt {
-        plan_signed(thread, instructions, SignOff::Unchanged, DEFAULT_PROMPT_TEMPLATE, rag)
+        plan_signed(thread, instructions, by_name(), DEFAULT_PROMPT_TEMPLATE, rag)
     }
 
     fn plan_signed(
@@ -1224,6 +1252,33 @@ mod tests {
 
     fn rule() -> String {
         app_signature_rule("Ana Example")
+    }
+
+    fn by_name() -> SignOff {
+        SignOff::FirstName {
+            first_name: "Ana".to_string(),
+        }
+    }
+
+    #[test]
+    fn first_name_rule_asks_to_sign_with_the_name() {
+        let r = sign_off_rule(&by_name());
+        assert!(r.contains("\"Ana\""), "{r}");
+        assert!(r.contains("closing line"), "{r}");
+    }
+
+    #[test]
+    fn rules_without_an_app_signature_forbid_a_name_placeholder() {
+        for sign_off in [by_name(), SignOff::ClosingOnly] {
+            let r = sign_off_rule(&sign_off);
+            assert!(r.contains("[Your name]") && r.contains("never"), "{r}");
+        }
+    }
+
+    #[test]
+    fn closing_only_rule_names_nobody() {
+        let r = sign_off_rule(&SignOff::ClosingOnly);
+        assert!(r.contains("closing line only") && !r.contains("(\""), "{r}");
     }
 
     #[test]
@@ -1260,18 +1315,23 @@ mod tests {
     }
 
     #[test]
-    fn sign_off_is_unchanged_without_a_signature() {
-        assert_eq!(plan_sign_off(None, DraftKind::Reply, "Ana Example"), SignOff::Unchanged);
-        assert_eq!(plan_sign_off(None, DraftKind::New, "Ana Example"), SignOff::Unchanged);
+    fn sign_off_is_the_first_name_without_a_signature() {
+        // The model cannot know the sender's name for a new email: without
+        // it, it writes a "[Your name]" placeholder.
+        assert_eq!(plan_sign_off(None, DraftKind::Reply, " Ana Example "), by_name());
+        assert_eq!(plan_sign_off(None, DraftKind::New, "Ana Example"), by_name());
     }
 
     #[test]
-    fn sign_off_is_unchanged_for_an_empty_signature() {
+    fn sign_off_is_the_first_name_for_an_empty_signature() {
         let sig = signature("  ", true, true);
-        assert_eq!(
-            plan_sign_off(Some(&sig), DraftKind::Reply, "Ana Example"),
-            SignOff::Unchanged
-        );
+        assert_eq!(plan_sign_off(Some(&sig), DraftKind::Reply, "Ana Example"), by_name());
+    }
+
+    #[test]
+    fn sign_off_is_a_closing_only_without_a_signature_or_a_name() {
+        assert_eq!(plan_sign_off(None, DraftKind::New, "  "), SignOff::ClosingOnly);
+        assert_eq!(plan_sign_off(None, DraftKind::Reply, ""), SignOff::ClosingOnly);
     }
 
     #[test]
@@ -1279,7 +1339,7 @@ mod tests {
         let replies_only = signature("<p>Ana</p>", false, true);
         assert_eq!(
             plan_sign_off(Some(&replies_only), DraftKind::New, "Ana Example"),
-            SignOff::Unchanged
+            by_name()
         );
         assert_eq!(
             plan_sign_off(Some(&replies_only), DraftKind::Reply, "Ana Example"),
@@ -1289,18 +1349,18 @@ mod tests {
         assert_eq!(plan_sign_off(Some(&new_only), DraftKind::New, "Ana Example"), signed());
         assert_eq!(
             plan_sign_off(Some(&new_only), DraftKind::Reply, "Ana Example"),
-            SignOff::Unchanged
+            by_name()
         );
     }
 
     #[test]
-    fn per_draft_section_is_unchanged_without_a_signature() {
-        // Accounts without a signature keep exactly the prompt they had.
-        assert_eq!(per_draft_section(None, &SignOff::Unchanged), "");
-        assert_eq!(per_draft_section(Some("  "), &SignOff::Unchanged), "");
+    fn per_draft_section_carries_the_sign_off_rule_without_a_signature() {
+        let rule = sign_off_rule(&by_name());
+        assert_eq!(per_draft_section(None, &by_name()), rule);
+        assert_eq!(per_draft_section(Some("  "), &by_name()), rule);
         assert_eq!(
-            per_draft_section(Some(" say yes "), &SignOff::Unchanged),
-            "Additional instructions: say yes\n\n"
+            per_draft_section(Some(" say yes "), &by_name()),
+            format!("Additional instructions: say yes\n\n{rule}")
         );
     }
 
@@ -1321,12 +1381,16 @@ mod tests {
     }
 
     #[test]
-    fn reply_prompt_cached_prefix_is_identical_with_and_without_a_signature() {
+    fn reply_prompt_cached_prefix_is_identical_for_every_sign_off() {
         let thread = [msg("Alice", "can we meet?")];
-        let plain = plan_signed(&thread, None, SignOff::Unchanged, DEFAULT_PROMPT_TEMPLATE, "");
         let signed = plan_signed(&thread, None, signed(), DEFAULT_PROMPT_TEMPLATE, "");
-        assert_eq!(plain.prefix.as_bytes(), signed.prefix.as_bytes());
-        assert!(!plain.suffix.contains(&rule()));
+        for sign_off in [by_name(), SignOff::ClosingOnly] {
+            let own_rule = sign_off_rule(&sign_off);
+            let p = plan_signed(&thread, None, sign_off, DEFAULT_PROMPT_TEMPLATE, "");
+            assert_eq!(p.prefix.as_bytes(), signed.prefix.as_bytes());
+            assert!(p.suffix.contains(&own_rule) && !p.prefix.contains(&own_rule));
+            assert!(!p.suffix.contains(&rule()));
+        }
         assert!(signed.suffix.contains(&rule()));
         assert!(!signed.prefix.contains(&rule()));
     }
@@ -1394,25 +1458,21 @@ mod tests {
     }
 
     #[test]
-    fn reply_prompt_custom_template_without_instructions_is_unchanged_without_a_signature() {
+    fn reply_prompt_custom_template_without_instructions_gets_the_rule_without_a_signature() {
         let template = "You help {persona}.\n{thread_context}\nReply now:";
-        let p = plan_signed(&[msg("Alice", "hi")], Some("say yes"), SignOff::Unchanged, template, "");
-        assert!(p.suffix.trim_end().ends_with("Reply now:"));
+        for sign_off in [by_name(), SignOff::ClosingOnly] {
+            let rule = sign_off_rule(&sign_off);
+            let p = plan_signed(&[msg("Alice", "hi")], Some("say yes"), sign_off, template, "");
+            assert!(p.suffix.ends_with(&format!("Reply now:\n\n{rule}")), "{}", p.suffix);
+        }
     }
 
     #[test]
     fn new_draft_prompt_carries_the_rule_after_the_stable_head() {
         let to = vec!["ana@example.com".to_string()];
-        let plain = build_new_draft_prompt(
-            "p",
-            "s",
-            Language::En,
-            &to,
-            "Hi",
-            &per_draft_section(None, &SignOff::Unchanged),
-        );
+        let plain = build_new_draft_prompt("p", "s", Language::En, &to, "Hi", &per_draft_section(None, &by_name()));
         let signed = build_new_draft_prompt("p", "s", Language::En, &to, "Hi", &per_draft_section(None, &signed()));
-        assert!(!plain.contains(&rule()));
+        assert!(plain.contains(&sign_off_rule(&by_name())) && !plain.contains(&rule()));
         assert!(signed.contains(&rule()));
         let head = &plain[..plain.find("Recipients:").unwrap_or(0)];
         assert!(signed.starts_with(head) && !head.is_empty());
@@ -1460,9 +1520,10 @@ mod tests {
             thread: &[msg("Alice", "hi")],
             rag_context: "",
             instructions: None,
-            sign_off: SignOff::Unchanged,
+            sign_off: by_name(),
         });
-        assert_eq!(format!("{}{}", p.prefix, p.suffix), "Just write something nice.");
+        assert_eq!(p.prefix, "Just write something nice.");
+        assert_eq!(p.suffix, sign_off_rule(&by_name()));
     }
 
     // ── build_style_context ───────────────────────────────────────────────

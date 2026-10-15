@@ -146,6 +146,13 @@ pub fn draft_ending(draft: &str, first_name: &str) -> DraftEnding {
     }
 }
 
+/// Whether one draft passes. Pure. A name placeholder always fails: the
+/// draft goes out with "[Your name]" in it whoever signs. Otherwise the
+/// ending must match `expect_signed` (absent: report only).
+pub fn run_passes(expect_signed: Option<bool>, ending: &DraftEnding) -> bool {
+    !ending.placeholder_in_tail && expect_signed.is_none_or(|want| want == ending.signed())
+}
+
 fn first_name(full: &str) -> &str {
     full.split_whitespace().next().unwrap_or("")
 }
@@ -234,12 +241,12 @@ async fn run_case(db: &Arc<Database>, case: &DraftCase, repeat: usize) -> EvalRe
         if ending.signed() {
             signed_count += 1;
         }
-        let passed = case.expect_signed.is_none_or(|want| want == ending.signed());
+        let passed = run_passes(case.expect_signed, &ending);
         checks.push(EvidenceCheck {
             name: format!("run {} signed", i + 1),
             expected: case
                 .expect_signed
-                .map_or_else(|| "(report only)".to_string(), |b| b.to_string()),
+                .map_or_else(|| "no placeholder".to_string(), |b| format!("{b}, no placeholder")),
             actual: format!(
                 "{} (name_in_tail={}, placeholder={})",
                 ending.signed(),
@@ -376,6 +383,23 @@ mod tests {
     fn a_lone_placeholder_line_after_the_closing_counts_as_signed() {
         assert!(draft_ending("See you then,\n\n[placeholder]", "Ulises").signed());
         assert!(!draft_ending("Price: [placeholder] per hour.\nBest regards,", "Ulises").signed());
+    }
+
+    #[test]
+    fn a_placeholder_fails_every_run() {
+        let placeholder = draft_ending("Best regards,\n\n[Your Name]", "Ulises");
+        for expect in [None, Some(true), Some(false)] {
+            assert!(!run_passes(expect, &placeholder), "expect_signed={expect:?}");
+        }
+    }
+
+    #[test]
+    fn a_run_passes_when_the_ending_matches_the_expectation() {
+        let named = draft_ending("Best regards,\nUlises", "Ulises");
+        let closing = draft_ending("Best regards,", "Ulises");
+        assert!(run_passes(None, &named) && run_passes(None, &closing));
+        assert!(run_passes(Some(true), &named) && !run_passes(Some(true), &closing));
+        assert!(run_passes(Some(false), &closing) && !run_passes(Some(false), &named));
     }
 
     #[test]
