@@ -6,8 +6,9 @@
 # expect_signed: whether the last lines of the draft may carry the sender's
 #   first name (or a "[Your name]" placeholder). `false` when the account's
 #   signature applies to this kind of message: the app adds it below the
-#   draft, so a name there signs the message twice. Omitted: report only
-#   (accounts without a signature keep the prompt they always had).
+#   draft, so a name there signs the message twice. Omitted: report only.
+# A "[Your name]"-style placeholder at the end fails every case, whatever
+# expect_signed says.
 #
 # Run: make eval-draft-cases ARGS="--repeat 3"
 #      (add --case <id-substring> to run a subset, --model <name> to switch)
@@ -114,6 +115,13 @@
 - id: new_no_signature_en
   kind: new
   account: { email: ulises@example.com, name: Ulises Ortega }
+  to: [carla@example.com]
+  subject: Proposal follow-up
+  instructions: Ask Carla whether she had time to review the proposal sent last week, and offer a short call.
+
+- id: new_no_signature_no_name_en
+  kind: new
+  account: { email: ulises@example.com, name: "" }
   to: [carla@example.com]
   subject: Proposal follow-up
   instructions: Ask Carla whether she had time to review the proposal sent last week, and offer a short call.
