@@ -87,6 +87,14 @@ Erscheinungsbild → Nach dem Archivieren oder Löschen** wählt zwischen der n�
 der vorherigen oder der Rückkehr zur Liste. Eine Konversation als ungelesen zu markieren führt
 immer zurück zur Liste.
 
+<!-- claim:feat-organize-6 -->
+**Alle** und **Ungelesen** über der Liste bestimmen, was sie zeigt. **Ungelesen** behält nur
+Unterhaltungen mit einer ungelesenen Nachricht — in Ansichten mit einzelnen Nachrichten, etwa
+gesendeten E-Mails und Ordnern, nur die ungelesenen Nachrichten — in jeder Ansicht und auch mit
+einem intelligenten Filter; während einer Suche ist es ausgeblendet. Eine Unterhaltung, die Sie
+öffnen, bleibt in der Liste, bis diese neu geladen wird, und die Auswahl gilt, bis Sie EmailOps
+beenden.
+
 ## Zurückstellen {#snooze}
 
 <!-- claim:feat-snooze-1 -->

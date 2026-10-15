@@ -1695,6 +1695,78 @@ mod tests {
         );
     }
 
+    #[test]
+    fn an_unread_filter_lists_threads_with_any_unread_message() {
+        let db = Database::new_for_testing().unwrap();
+        insert_account(&db, "acc1", "me@mymail.com");
+        // t-reply: Bob's message is read, a later reply from someone else is not.
+        insert_contact_email(&db, "b1", "acc1", "t-reply", "Bob", "bob@acme.com", "[]", "inbox", 100);
+        insert_contact_email(&db, "c1", "acc1", "t-reply", "Cy", "cy@other.com", "[]", "inbox", 200);
+        // t-read: Bob's thread, all read.
+        insert_contact_email(&db, "b2", "acc1", "t-read", "Bob", "bob@acme.com", "[]", "inbox", 300);
+        db.set_read_local("b1", true).unwrap();
+        db.set_read_local("b2", true).unwrap();
+        let window = crate::models::EmailWindow {
+            unread_only: true,
+            ..Default::default()
+        };
+
+        let result = db
+            .get_filtered_emails(
+                crate::db::AccountScope::Account("acc1"),
+                None,
+                Some("bob@acme.com"),
+                None,
+                None,
+                None,
+                &window,
+                50,
+                0,
+            )
+            .unwrap();
+
+        let ids: Vec<&str> = result.emails.iter().map(|e| e.id.as_str()).collect();
+        assert_eq!(ids, vec!["b1"]);
+    }
+
+    #[test]
+    fn an_unread_tag_filter_lists_threads_with_any_unread_message() {
+        let db = Database::new_for_testing().unwrap();
+        insert_account(&db, "acc1", "me@mymail.com");
+        insert_contact_email(&db, "t1", "acc1", "t-unread", "Bob", "bob@acme.com", "[]", "inbox", 100);
+        insert_contact_email(&db, "t2", "acc1", "t-read", "Bob", "bob@acme.com", "[]", "inbox", 200);
+        for id in ["t1", "t2"] {
+            db.connection()
+                .execute(
+                    "INSERT INTO email_tags (email_id, tag_type, tag_value, created_at) VALUES (?1, 'company', 'Acme', 0)",
+                    rusqlite::params![id],
+                )
+                .unwrap();
+        }
+        db.set_read_local("t2", true).unwrap();
+        let window = crate::models::EmailWindow {
+            unread_only: true,
+            ..Default::default()
+        };
+
+        let result = db
+            .get_filtered_emails(
+                crate::db::AccountScope::Account("acc1"),
+                None,
+                None,
+                Some("company"),
+                Some("Acme"),
+                None,
+                &window,
+                50,
+                0,
+            )
+            .unwrap();
+
+        let ids: Vec<&str> = result.emails.iter().map(|e| e.id.as_str()).collect();
+        assert_eq!(ids, vec!["t1"]);
+    }
+
     // ── AllEnabled (unified) scope ───────────────────────────────────────────────
 
     fn set_enabled(db: &Database, account: &str, enabled: bool) {

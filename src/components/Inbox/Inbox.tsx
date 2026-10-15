@@ -1,6 +1,7 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { accountColorClass } from '@/lib/colors';
+import { filterFromQuery } from '@/lib/filterQuery';
 import { isUnifiedMode, type SyncProgress, selectEffectiveAccountId, useAccountStore } from '@/stores/accountStore';
 import { useEmailStore } from '@/stores/emailStore';
 import { useFilterStore } from '@/stores/filterStore';
@@ -13,6 +14,7 @@ import { ActiveSearchNotice } from './ActiveSearchNotice';
 import { BulkToolbar } from './BulkToolbar';
 import type { RulePrefill } from './EmailRow';
 import { InboxSearchBox } from './InboxSearchBox';
+import { ReadFilterToggle } from './ReadFilterToggle';
 import { VirtualEmailList } from './VirtualEmailList';
 
 interface InboxProps {
@@ -190,6 +192,7 @@ export function Inbox({
   }, [availableCategories]);
 
   const searchQuery = useEmailStore((s) => s.searchQuery);
+  const unreadOnly = useEmailStore((s) => s.unreadOnly);
 
   // Active tab selection model:
   // - "all" while a search is active: search spans every category, and the
@@ -455,13 +458,18 @@ export function Inbox({
   const hasActiveFilter = Boolean(searchQuery) || Boolean(activeFilter);
   const hasCategoryFilter =
     showCategoryFilter && selectedCategories.size > 0 && selectedCategories.size < visibleCategories.length;
+  // A sidebar filter travels as a one-token query; anything else is a
+  // free-text search, which the Unread toggle does not apply to.
+  const isTextSearch = Boolean(searchQuery?.trim()) && !filterFromQuery(searchQuery);
   const emptyStateMessage: string = isSyncing
     ? 'Syncing emails...'
-    : searchQuery
+    : isTextSearch
       ? 'No emails match your search'
-      : hasActiveFilter || hasCategoryFilter
-        ? 'No emails match the selected filters'
-        : 'No emails yet — try syncing or adding an account';
+      : unreadOnly
+        ? t('inbox:readFilter.empty')
+        : hasActiveFilter || hasCategoryFilter
+          ? 'No emails match the selected filters'
+          : 'No emails yet — try syncing or adding an account';
 
   const showTabs = showCategoryFilter && visibleCategories.length > 0;
   return (
@@ -476,7 +484,10 @@ export function Inbox({
         ) : (
           <div className="flex items-center gap-2">
             {/* Title */}
-            <div className="flex items-center gap-1.5 flex-shrink-0 max-w-[45%] min-w-0">
+            {/* The title gives way before the search: it truncates, the
+                search keeps room to type (the header also holds the
+                All / Unread toggle and Load more). */}
+            <div className="flex items-center gap-1.5 max-w-[45%] min-w-0">
               <h2 className="text-lg font-semibold text-gray-900 truncate">
                 {title ?? (accountName ? `Inbox — ${accountName}` : 'Inbox')}
               </h2>
@@ -489,7 +500,7 @@ export function Inbox({
                 Only shown in full-width layout. In split layout the lateral
                 search bar is used instead, so we hide this to avoid duplication. */}
             {fullWidth && (
-              <div className="flex-1 flex justify-center min-w-0">
+              <div className="flex-1 flex justify-center min-w-[10rem]">
                 <InboxSearchBox
                   accountId={isUnified ? autocompleteAccountId : accountId}
                   externalQuery={searchQuery ?? ''}
@@ -501,6 +512,7 @@ export function Inbox({
 
             {/* Action buttons */}
             <div className="flex items-center gap-1 flex-shrink-0">
+              {!isTextSearch && <ReadFilterToggle />}
               {hasMore && !isLoadingMore && (
                 <button
                   onClick={onLoadMore}

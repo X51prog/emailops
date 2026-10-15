@@ -18,6 +18,12 @@
   "categoriesAria": "Categorías de correo",
   "allCategories": "Todos",
   "searchAllCategories": "La búsqueda incluye todas las categorías",
+  "readFilter": {
+    "aria": "Mostrar todos los correos o solo los no leídos",
+    "all": "Todos",
+    "unread": "No leídos",
+    "empty": "No hay correos sin leer"
+  },
   "noEmailSelected": "Ningún correo seleccionado",
   "selectEmailHint": "Selecciona un correo de la lista para verlo aquí.",
   "categoryFilter": {

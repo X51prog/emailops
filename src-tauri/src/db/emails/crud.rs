@@ -32,7 +32,16 @@ pub(super) enum ListShape {
 ///
 /// The "deleted" view is a union of provider Trash and app-side soft-deletes;
 /// all other views exclude soft-deleted rows.
-pub(super) fn mailbox_scope_sql(view: &str, prefix: &str, folder_placeholder: &str) -> MailboxScopeSql {
+///
+/// `unread_only` keeps the unread rows: in a flat view the message itself is
+/// unread; in a thread view any live message of the conversation is, so an
+/// older unread message under a newer read one still lists the thread.
+pub(super) fn mailbox_scope_sql(
+    view: &str,
+    prefix: &str,
+    folder_placeholder: &str,
+    unread_only: bool,
+) -> MailboxScopeSql {
     let mut conditions: Vec<String> = Vec::new();
     let mut folder_value = None;
     let mut shape = ListShape::Flat;
@@ -100,6 +109,20 @@ pub(super) fn mailbox_scope_sql(view: &str, prefix: &str, folder_placeholder: &s
             conditions.push(super::snoozes::not_snoozed_predicate(prefix));
             shape = ListShape::InboxThreads;
         }
+    }
+
+    // The thread check runs once per row walked. Without the index hint the
+    // planner probes `idx_emails_account_read` and walks the account's unread
+    // mail per row instead of seeking the row's thread.
+    if unread_only {
+        conditions.push(match shape {
+            ListShape::Flat => format!("{prefix}is_read = 0"),
+            ListShape::InboxThreads | ListShape::SnoozedThreads => format!(
+                "EXISTS (SELECT 1 FROM emails u INDEXED BY idx_emails_thread_latest \
+                 WHERE u.account_id = {prefix}account_id AND u.thread_id = {prefix}thread_id \
+                 AND u.is_read = 0 AND u.is_deleted = 0)"
+            ),
+        });
     }
 
     MailboxScopeSql {
@@ -304,6 +327,9 @@ impl Database {
     ///
     /// `category`, when set, additionally restricts the result to that Gmail
     /// category (`primary`/`social`/`promotions`/`updates`/`forums`).
+    ///
+    /// `unread_only` keeps the unread rows (see [`mailbox_scope_sql`]); pass
+    /// the same value to [`Database::count_emails`].
     pub fn get_emails(
         &self,
         scope: crate::db::AccountScope<'_>,
@@ -312,8 +338,9 @@ impl Database {
         cursor: Option<(i64, &str)>,
         mailbox: Option<&str>,
         category: Option<&str>,
+        unread_only: bool,
     ) -> Result<Vec<Email>> {
-        let (sql, params_vec) = Self::email_list_query(scope, limit, offset, cursor, mailbox, category);
+        let (sql, params_vec) = Self::email_list_query(scope, limit, offset, cursor, mailbox, category, unread_only);
         let conn = self.reader();
         let mut stmt = conn.prepare(&sql)?;
         let params_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
@@ -334,8 +361,9 @@ impl Database {
         limit: i32,
         offset: i32,
         mailbox: Option<&str>,
+        unread_only: bool,
     ) -> Vec<String> {
-        let (sql, binds) = Self::email_list_query(scope, limit, offset, None, mailbox, None);
+        let (sql, binds) = Self::email_list_query(scope, limit, offset, None, mailbox, None, unread_only);
         let conn = self.reader();
         let mut stmt = conn.prepare(&format!("EXPLAIN QUERY PLAN {sql}")).unwrap();
         let refs: Vec<&dyn rusqlite::ToSql> = binds.iter().map(|b| b.as_ref()).collect();
@@ -355,6 +383,7 @@ impl Database {
         cursor: Option<(i64, &str)>,
         mailbox: Option<&str>,
         category: Option<&str>,
+        unread_only: bool,
     ) -> (String, Vec<Box<dyn rusqlite::ToSql>>) {
         let mut conditions: Vec<String> = Vec::new();
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
@@ -373,7 +402,7 @@ impl Database {
         // Mailbox scope, shared with `count_emails` so the list and the count
         // always describe the same set.
         let view = mailbox.unwrap_or("inbox");
-        let scope_sql = mailbox_scope_sql(view, "e.", &format!("?{param_idx}"));
+        let scope_sql = mailbox_scope_sql(view, "e.", &format!("?{param_idx}"), unread_only);
         conditions.extend(scope_sql.conditions);
         if let Some(folder) = scope_sql.folder_value {
             params_vec.push(Box::new(folder));
@@ -718,7 +747,12 @@ impl Database {
     /// Must stay in lockstep with [`Database::get_emails`] — both derive their
     /// scope from [`mailbox_scope_sql`] — because the UI compares the length of
     /// the listed page against this count to decide whether to keep paging.
-    pub fn count_emails(&self, scope: crate::db::AccountScope<'_>, mailbox: Option<&str>) -> Result<i32> {
+    pub fn count_emails(
+        &self,
+        scope: crate::db::AccountScope<'_>,
+        mailbox: Option<&str>,
+        unread_only: bool,
+    ) -> Result<i32> {
         let conn = self.reader();
 
         let mut conditions: Vec<String> = Vec::new();
@@ -735,7 +769,12 @@ impl Database {
             }
         }
 
-        let scope_sql = mailbox_scope_sql(mailbox.unwrap_or("inbox"), "emails.", &format!("?{param_idx}"));
+        let scope_sql = mailbox_scope_sql(
+            mailbox.unwrap_or("inbox"),
+            "emails.",
+            &format!("?{param_idx}"),
+            unread_only,
+        );
         conditions.extend(scope_sql.conditions);
         if let Some(folder) = scope_sql.folder_value {
             params_vec.push(Box::new(folder));
@@ -1085,7 +1124,7 @@ mod tests {
     fn the_inbox_latest_in_thread_check_seeks_the_thread() {
         let db = Database::new_for_testing().unwrap();
         for scope in [AccountScope::Account("acc1"), AccountScope::AllEnabled] {
-            let plan = db.explain_get_emails(scope, 50, 0, None);
+            let plan = db.explain_get_emails(scope, 50, 0, None, false);
             let sub: Vec<&String> = plan.iter().filter(|step| step.starts_with("SEARCH sub ")).collect();
             assert!(!sub.is_empty(), "{plan:?}");
             assert!(
@@ -1251,7 +1290,7 @@ mod tests {
         db.delete_email("e1").unwrap();
 
         let emails = db
-            .get_emails(AccountScope::Account(account), 50, 0, None, None, None)
+            .get_emails(AccountScope::Account(account), 50, 0, None, None, None, false)
             .unwrap();
         let ids: Vec<&str> = emails.iter().map(|e| e.id.as_str()).collect();
 
@@ -1273,13 +1312,21 @@ mod tests {
         insert_email_with_category(&db, "promo2", account, "thread-c", 100, "promotions");
 
         let promos = db
-            .get_emails(AccountScope::Account(account), 50, 0, None, None, Some("promotions"))
+            .get_emails(
+                AccountScope::Account(account),
+                50,
+                0,
+                None,
+                None,
+                Some("promotions"),
+                false,
+            )
             .unwrap();
         let ids: Vec<&str> = promos.iter().map(|e| e.id.as_str()).collect();
         assert_eq!(ids, vec!["promo1", "promo2"], "only promotions, newest first");
 
         let all = db
-            .get_emails(AccountScope::Account(account), 50, 0, None, None, None)
+            .get_emails(AccountScope::Account(account), 50, 0, None, None, None, false)
             .unwrap();
         assert_eq!(all.len(), 3, "no category filter returns every inbox email");
     }
@@ -1321,7 +1368,7 @@ mod tests {
         insert_email(&db, "e3", "acc1", "t3", 200);
 
         let emails = db
-            .get_emails(AccountScope::AllEnabled, 50, 0, None, None, None)
+            .get_emails(AccountScope::AllEnabled, 50, 0, None, None, None, false)
             .unwrap();
         let ids: Vec<&str> = emails.iter().map(|e| e.id.as_str()).collect();
         assert_eq!(ids, vec!["e2", "e3", "e1"], "merged across accounts, newest first");
@@ -1337,7 +1384,7 @@ mod tests {
         set_account_enabled(&db, "acc2", false);
 
         let emails = db
-            .get_emails(AccountScope::AllEnabled, 50, 0, None, None, None)
+            .get_emails(AccountScope::AllEnabled, 50, 0, None, None, None, false)
             .unwrap();
         let ids: Vec<&str> = emails.iter().map(|e| e.id.as_str()).collect();
         assert_eq!(ids, vec!["e1"], "disabled account's emails must be excluded");
@@ -1368,7 +1415,7 @@ mod tests {
         insert_contact_email(&db, "s2", "acc2", "t3", "Me2", "a2@example.com", "[]", "sent", 100);
 
         let emails = db
-            .get_emails(AccountScope::AllEnabled, 50, 0, None, Some("sent"), None)
+            .get_emails(AccountScope::AllEnabled, 50, 0, None, Some("sent"), None, false)
             .unwrap();
         let ids: Vec<&str> = emails.iter().map(|e| e.id.as_str()).collect();
         assert_eq!(
@@ -1393,7 +1440,7 @@ mod tests {
         insert_contact_email(&db, "alias", "acc1", "t2", "Me", "me@alias.example", "[]", "sent", 200);
 
         let emails = db
-            .get_emails(AccountScope::Account("acc1"), 50, 0, None, Some("sent"), None)
+            .get_emails(AccountScope::Account("acc1"), 50, 0, None, Some("sent"), None, false)
             .unwrap();
         let ids: Vec<&str> = emails.iter().map(|e| e.id.as_str()).collect();
         assert_eq!(
@@ -1422,7 +1469,7 @@ mod tests {
         );
 
         let emails = db
-            .get_emails(AccountScope::Account("acc1"), 50, 0, None, Some("sent"), None)
+            .get_emails(AccountScope::Account("acc1"), 50, 0, None, Some("sent"), None, false)
             .unwrap();
         assert!(emails.is_empty(), "inbox mail from a third party is not sent mail");
     }
@@ -1441,7 +1488,7 @@ mod tests {
         insert_email(&db, "e2a", "acc2", "shared-thread", 120);
 
         let emails = db
-            .get_emails(AccountScope::AllEnabled, 50, 0, None, None, None)
+            .get_emails(AccountScope::AllEnabled, 50, 0, None, None, None, false)
             .unwrap();
         let ids: Vec<&str> = emails.iter().map(|e| e.id.as_str()).collect();
         assert_eq!(
@@ -1467,12 +1514,12 @@ mod tests {
         set_account_enabled(&db, "acc3", false);
 
         assert_eq!(
-            db.count_emails(AccountScope::AllEnabled, None).unwrap(),
+            db.count_emails(AccountScope::AllEnabled, None, false).unwrap(),
             2,
             "counts distinct (account_id, thread_id) pairs across enabled accounts"
         );
         assert_eq!(
-            db.count_emails(AccountScope::Account("acc1"), None).unwrap(),
+            db.count_emails(AccountScope::Account("acc1"), None, false).unwrap(),
             1,
             "single-account count unchanged"
         );
@@ -1493,17 +1540,19 @@ mod tests {
         insert_contact_email(&db, "s2", "acc1", "t4", "Me", "me@alias.example", "[]", "sent", 400);
 
         assert_eq!(
-            db.count_emails(AccountScope::Account("acc1"), Some("sent")).unwrap(),
+            db.count_emails(AccountScope::Account("acc1"), Some("sent"), false)
+                .unwrap(),
             2,
             "sent view counts sent mail, not inbox threads"
         );
         assert_eq!(
-            db.count_emails(AccountScope::Account("acc1"), Some("inbox")).unwrap(),
+            db.count_emails(AccountScope::Account("acc1"), Some("inbox"), false)
+                .unwrap(),
             2,
             "inbox view still counts inbox threads"
         );
         assert_eq!(
-            db.count_emails(AccountScope::Account("acc1"), None).unwrap(),
+            db.count_emails(AccountScope::Account("acc1"), None, false).unwrap(),
             2,
             "no mailbox argument keeps the historic inbox behaviour"
         );
@@ -1519,7 +1568,7 @@ mod tests {
     }
 
     fn listed_ids(db: &Database, view: &str) -> Vec<String> {
-        db.get_emails(AccountScope::Account("acc1"), 50, 0, None, Some(view), None)
+        db.get_emails(AccountScope::Account("acc1"), 50, 0, None, Some(view), None, false)
             .unwrap()
             .into_iter()
             .map(|e| e.id)
@@ -1540,7 +1589,8 @@ mod tests {
         assert_eq!(listed_ids(&db, "inbox"), vec!["kept".to_string()]);
         assert_eq!(listed_ids(&db, "archive"), vec!["archived".to_string()]);
         assert_eq!(
-            db.count_emails(AccountScope::Account("acc1"), Some("archive")).unwrap(),
+            db.count_emails(AccountScope::Account("acc1"), Some("archive"), false)
+                .unwrap(),
             1
         );
     }
@@ -1573,11 +1623,12 @@ mod tests {
             vec!["archived".to_string(), "starred".to_string()]
         );
         assert_eq!(
-            db.count_emails(AccountScope::Account("acc1"), Some("starred")).unwrap(),
+            db.count_emails(AccountScope::Account("acc1"), Some("starred"), false)
+                .unwrap(),
             2
         );
         let listed = db
-            .get_emails(AccountScope::Account("acc1"), 50, 0, None, Some("starred"), None)
+            .get_emails(AccountScope::Account("acc1"), 50, 0, None, Some("starred"), None, false)
             .unwrap();
         assert!(listed.iter().all(|e| e.is_starred), "rows carry their star");
     }
@@ -1594,9 +1645,11 @@ mod tests {
         insert_email(&db, "i1", "acc1", "t4", 100);
 
         let listed = db
-            .get_emails(AccountScope::Account("acc1"), 50, 0, None, Some("sent"), None)
+            .get_emails(AccountScope::Account("acc1"), 50, 0, None, Some("sent"), None, false)
             .unwrap();
-        let counted = db.count_emails(AccountScope::Account("acc1"), Some("sent")).unwrap();
+        let counted = db
+            .count_emails(AccountScope::Account("acc1"), Some("sent"), false)
+            .unwrap();
         assert_eq!(counted as usize, listed.len());
     }
 
@@ -1631,7 +1684,7 @@ mod tests {
         );
 
         let ids: Vec<String> = db
-            .get_emails(AccountScope::Account("acc1"), 50, 0, None, Some("sent"), None)
+            .get_emails(AccountScope::Account("acc1"), 50, 0, None, Some("sent"), None, false)
             .unwrap()
             .into_iter()
             .map(|e| e.id)
@@ -1651,9 +1704,11 @@ mod tests {
         db.insert_email(&self_sent).unwrap();
 
         let listed = db
-            .get_emails(AccountScope::Account("acc1"), 50, 0, None, Some("sent"), None)
+            .get_emails(AccountScope::Account("acc1"), 50, 0, None, Some("sent"), None, false)
             .unwrap();
-        let counted = db.count_emails(AccountScope::Account("acc1"), Some("sent")).unwrap();
+        let counted = db
+            .count_emails(AccountScope::Account("acc1"), Some("sent"), false)
+            .unwrap();
         assert_eq!(counted as usize, listed.len(), "count must track the widened predicate");
     }
 
@@ -1944,7 +1999,7 @@ mod tests {
         let db = Database::new_for_testing().unwrap();
         four_threads_in_two_accounts(&db);
         let page2 = db
-            .get_emails(AccountScope::AllEnabled, 2, 0, Some((300, "e3")), None, None)
+            .get_emails(AccountScope::AllEnabled, 2, 0, Some((300, "e3")), None, None, false)
             .unwrap();
         assert_eq!(ids_of(page2), vec!["e2", "e1"], "the page after the cursor point");
     }
@@ -1954,7 +2009,7 @@ mod tests {
         let db = Database::new_for_testing().unwrap();
         four_threads_in_two_accounts(&db);
         let page = db
-            .get_emails(AccountScope::AllEnabled, 2, 1, Some((300, "e3")), None, None)
+            .get_emails(AccountScope::AllEnabled, 2, 1, Some((300, "e3")), None, None, false)
             .unwrap();
         assert_eq!(
             ids_of(page),
@@ -1967,7 +2022,137 @@ mod tests {
     fn the_unified_inbox_pages_by_offset() {
         let db = Database::new_for_testing().unwrap();
         four_threads_in_two_accounts(&db);
-        let third = db.get_emails(AccountScope::AllEnabled, 1, 2, None, None, None).unwrap();
+        let third = db
+            .get_emails(AccountScope::AllEnabled, 1, 2, None, None, None, false)
+            .unwrap();
         assert_eq!(ids_of(third), vec!["e2"]);
+    }
+
+    // ── Unread filter ────────────────────────────────────────────────────
+
+    fn read(db: &Database, ids: &[&str]) {
+        for id in ids {
+            db.set_read_local(id, true).unwrap();
+        }
+    }
+
+    fn file_in(db: &Database, id: &str, mailbox: &str) {
+        db.connection()
+            .execute(
+                "UPDATE emails SET mailbox = ?2 WHERE id = ?1",
+                rusqlite::params![id, mailbox],
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn the_unread_inbox_lists_threads_with_any_unread_message() {
+        let db = Database::new_for_testing().unwrap();
+        // t-old-unread: an older unread message under a newer read one.
+        insert_email(&db, "a1", "acc1", "t-old-unread", 100);
+        insert_email(&db, "a2", "acc1", "t-old-unread", 200);
+        // t-read: everything read.
+        insert_email(&db, "b1", "acc1", "t-read", 300);
+        // t-deleted-unread: the only unread message is deleted.
+        insert_email(&db, "c1", "acc1", "t-deleted-unread", 400);
+        insert_email(&db, "c2", "acc1", "t-deleted-unread", 50);
+        read(&db, &["a2", "b1", "c1"]);
+        db.delete_email("c2").unwrap();
+
+        let listed = db
+            .get_emails(AccountScope::Account("acc1"), 50, 0, None, None, None, true)
+            .unwrap();
+
+        assert_eq!(
+            ids_of(listed),
+            vec!["a2"],
+            "the thread's row is still its latest message"
+        );
+    }
+
+    #[test]
+    fn the_unread_inbox_count_matches_the_unread_list() {
+        let db = Database::new_for_testing().unwrap();
+        insert_account(&db, "acc1", "a1@example.com");
+        insert_account(&db, "acc2", "a2@example.com");
+        // The same thread id in two accounts: unread in one, read in the other.
+        insert_email(&db, "x1", "acc1", "shared", 100);
+        insert_email(&db, "y1", "acc2", "shared", 200);
+        insert_email(&db, "z1", "acc2", "other", 300);
+        read(&db, &["y1"]);
+
+        let listed = db
+            .get_emails(AccountScope::AllEnabled, 50, 0, None, None, None, true)
+            .unwrap();
+        let counted = db.count_emails(AccountScope::AllEnabled, None, true).unwrap();
+
+        assert_eq!(ids_of(listed), vec!["z1", "x1"]);
+        assert_eq!(counted, 2);
+    }
+
+    #[test]
+    fn a_flat_view_lists_only_its_own_unread_messages() {
+        let db = Database::new_for_testing().unwrap();
+        // An archived thread: one read message, one unread.
+        insert_email(&db, "r1", "acc1", "t1", 100);
+        insert_email(&db, "u1", "acc1", "t1", 200);
+        file_in(&db, "r1", "archive");
+        file_in(&db, "u1", "archive");
+        read(&db, &["r1"]);
+
+        let listed = db
+            .get_emails(AccountScope::Account("acc1"), 50, 0, None, Some("archive"), None, true)
+            .unwrap();
+        let counted = db
+            .count_emails(AccountScope::Account("acc1"), Some("archive"), true)
+            .unwrap();
+
+        assert_eq!(ids_of(listed), vec!["u1"]);
+        assert_eq!(counted, 1);
+    }
+
+    #[test]
+    fn the_unread_snoozed_view_counts_what_it_lists() {
+        let db = Database::new_for_testing().unwrap();
+        insert_email(&db, "s1", "acc1", "t-unread", 100);
+        insert_email(&db, "s2", "acc1", "t-read", 200);
+        read(&db, &["s2"]);
+        for thread in ["t-unread", "t-read"] {
+            db.connection()
+                .execute(
+                    "INSERT INTO thread_snoozes (account_id, thread_id, snoozed_until, created_at) \
+                     VALUES ('acc1', ?1, 9999999999, 0)",
+                    rusqlite::params![thread],
+                )
+                .unwrap();
+        }
+
+        let listed = db
+            .get_emails(AccountScope::Account("acc1"), 50, 0, None, Some("snoozed"), None, true)
+            .unwrap();
+        let counted = db
+            .count_emails(AccountScope::Account("acc1"), Some("snoozed"), true)
+            .unwrap();
+
+        assert_eq!(ids_of(listed), vec!["s1"]);
+        assert_eq!(counted, 1);
+    }
+
+    /// The unread check runs once per inbox row walked, so it must seek the
+    /// row's thread rather than walk the account.
+    #[test]
+    fn the_unread_check_seeks_the_thread() {
+        let db = Database::new_for_testing().unwrap();
+        for scope in [AccountScope::Account("acc1"), AccountScope::AllEnabled] {
+            let plan = db.explain_get_emails(scope, 50, 0, None, true);
+            let unread: Vec<&String> = plan.iter().filter(|step| step.starts_with("SEARCH u ")).collect();
+            assert!(!unread.is_empty(), "{plan:?}");
+            assert!(
+                unread
+                    .iter()
+                    .all(|step| step.contains("idx_emails_thread_latest (account_id=? AND thread_id=?)")),
+                "{plan:?}"
+            );
+        }
     }
 }

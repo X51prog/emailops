@@ -152,7 +152,7 @@ fn list_accounts(db: &Database) -> Result<(), Box<dyn std::error::Error>> {
     println!("\nAvailable accounts:");
     println!("{:-<60}", "");
     for account in accounts {
-        let email_count = db.count_emails(emailops_lib::db::AccountScope::Account(&account.id), None)?;
+        let email_count = db.count_emails(emailops_lib::db::AccountScope::Account(&account.id), None, false)?;
         println!(
             "ID: {}\n  Email: {}\n  Provider: {}\n  Emails: {}\n",
             account.id, account.email, account.provider, email_count
@@ -187,6 +187,7 @@ fn export_fixtures(
         None,
         None,
         None,
+        false,
     )?;
     println!("  Found {} emails", emails.len());
 

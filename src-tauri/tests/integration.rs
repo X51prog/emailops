@@ -354,6 +354,7 @@ fn get_emails_returns_correct_account_only() {
             None,
             None,
             None,
+            false,
         )
         .expect("get");
     assert_eq!(emails.len(), 2);
@@ -374,6 +375,7 @@ fn get_emails_empty_for_unknown_account() {
             None,
             None,
             None,
+            false,
         )
         .expect("get");
     assert!(result.is_empty());
@@ -396,6 +398,7 @@ fn get_emails_respects_limit() {
             None,
             None,
             None,
+            false,
         )
         .expect("get");
     assert_eq!(emails.len(), 3);
@@ -418,6 +421,7 @@ fn get_emails_ordered_newest_first() {
             None,
             None,
             None,
+            false,
         )
         .expect("get");
     assert_eq!(emails.len(), 2);
@@ -1838,6 +1842,7 @@ fn get_emails_sent_view_filters_by_sender_address() {
             None,
             Some("sent"),
             None,
+            false,
         )
         .unwrap();
     let ids: Vec<&str> = sent.iter().map(|e| e.id.as_str()).collect();
@@ -1865,6 +1870,7 @@ fn get_emails_spam_view_filters_by_mailbox() {
             None,
             Some("spam"),
             None,
+            false,
         )
         .unwrap();
     let ids: Vec<&str> = spam.iter().map(|e| e.id.as_str()).collect();
@@ -1887,12 +1893,12 @@ fn count_emails_counts_inbox_threads_only() {
         .unwrap();
 
     let count = db
-        .count_emails(emailops_lib::db::AccountScope::Account("acc-cnt"), None)
+        .count_emails(emailops_lib::db::AccountScope::Account("acc-cnt"), None, false)
         .unwrap();
     assert_eq!(count, 2, "count_emails must only count inbox threads, not spam");
 
     let spam_count = db
-        .count_emails(emailops_lib::db::AccountScope::Account("acc-cnt"), Some("spam"))
+        .count_emails(emailops_lib::db::AccountScope::Account("acc-cnt"), Some("spam"), false)
         .unwrap();
     assert_eq!(spam_count, 1, "the spam view counts spam, not inbox threads");
 }
@@ -2090,6 +2096,7 @@ async fn send_reply_with_provider_inserts_optimistic_row_in_thread_and_sent_view
             None,
             Some("sent"),
             None,
+            false,
         )
         .unwrap();
     assert!(
@@ -2346,6 +2353,7 @@ async fn sync_with_provider_stores_new_emails() {
             None,
             None,
             None,
+            false,
         )
         .unwrap();
     assert_eq!(emails.len(), 2, "both new emails must be stored");
@@ -2467,6 +2475,7 @@ async fn sync_files_new_mail_from_a_blocked_sender_as_spam() {
             None,
             Some("inbox"),
             None,
+            false,
         )
         .unwrap();
     assert_eq!(
@@ -2604,6 +2613,7 @@ async fn narrowing_the_sync_range_stops_the_next_sync_re_listing_old_mail() {
             None,
             None,
             None,
+            false,
         )
         .unwrap()
         .into_iter()
@@ -2661,6 +2671,7 @@ async fn an_abort_request_stops_the_sync_and_is_consumed() {
             None,
             None,
             None,
+            false,
         )
         .unwrap();
     assert!(stored.is_empty(), "an aborted sync must not keep downloading");
@@ -2732,6 +2743,7 @@ async fn widening_the_range_reopens_the_backfill_even_when_the_retired_sync_rewr
             None,
             Some("sent"),
             None,
+            false,
         )
         .unwrap()
         .into_iter()
@@ -3014,6 +3026,7 @@ async fn custom_folder_sync_creates_folder_rows_emails_and_watermark() {
             None,
             Some("folder:Patienten"),
             None,
+            false,
         )
         .unwrap();
     assert_eq!(folder_emails.len(), 2, "both folder emails stored");
@@ -3025,6 +3038,7 @@ async fn custom_folder_sync_creates_folder_rows_emails_and_watermark() {
             None,
             Some("inbox"),
             None,
+            false,
         )
         .unwrap();
     assert!(inbox_emails.is_empty(), "folder mail must not leak into inbox view");
@@ -3075,6 +3089,7 @@ async fn custom_folder_second_sync_inserts_nothing_new() {
             None,
             Some("folder:Projekte"),
             None,
+            false,
         )
         .unwrap();
     assert_eq!(folder_emails.len(), 1, "second sync must not duplicate");
@@ -3360,6 +3375,7 @@ async fn sync_does_not_duplicate_gmail_optimistic_row() {
             None,
             None,
             None,
+            false,
         )
         .unwrap();
     assert_eq!(all.len(), 1, "existing-id dedup keeps a single row");
@@ -3445,6 +3461,7 @@ async fn sync_with_provider_deduplicates_existing_emails() {
             None,
             None,
             None,
+            false,
         )
         .unwrap();
     assert_eq!(
@@ -3503,6 +3520,7 @@ async fn sync_with_provider_incremental_uses_latest_timestamp() {
             None,
             None,
             None,
+            false,
         )
         .unwrap();
     assert_eq!(emails.len(), 2, "total must be old + new");
@@ -3546,6 +3564,7 @@ async fn sync_with_provider_no_new_emails_leaves_db_unchanged() {
             None,
             None,
             None,
+            false,
         )
         .unwrap();
     assert_eq!(emails.len(), 1, "no emails must be added when nothing is new");
@@ -3629,6 +3648,7 @@ async fn inbox_incremental_watermark_is_not_poisoned_by_sent_timestamp() {
             None,
             None,
             None,
+            false,
         )
         .unwrap();
     let ids: std::collections::HashSet<&str> = emails.iter().map(|e| e.id.as_str()).collect();
@@ -3866,6 +3886,7 @@ fn delete_email_hides_it_from_get_emails() {
             None,
             None,
             None,
+            false,
         )
         .unwrap();
     let ids: Vec<&str> = emails.iter().map(|e| e.id.as_str()).collect();
@@ -6501,6 +6522,7 @@ async fn thread_action_archive_and_move_to_inbox_round_trip() {
             None,
             Some("inbox"),
             None,
+            false,
         )
         .unwrap()
         .into_iter()
@@ -6540,6 +6562,7 @@ async fn snooze_hides_a_thread_until_the_wake_pass_brings_it_back() {
             None,
             Some("inbox"),
             None,
+            false,
         )
         .unwrap()
         .into_iter()

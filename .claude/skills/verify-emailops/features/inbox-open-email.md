@@ -11,12 +11,14 @@ the list.
 - `inbox.categories` the Primary/Social/Updates/Forums/Promotions tabs filter the list.
 - `inbox.open` clicking a row shows the thread with its subject as the page H1.
 - `inbox.close` Back hides the thread and shows the list again.
+- `inbox.unread` the header's **All / Unread** toggle lists only conversations with an unread message (flat views: unread messages), in every mailbox view and sidebar filter; hidden during a free-text search.
 
 ## How to get to it (user POV)
 
 - Sidebar → Views → **Inbox** (default view after launch).
 - Clicking an account in the sidebar switches the list to that account; **All accounts** merges them.
 - A row's ⋮ menu also offers "Open in new tab" and "Chat about this thread".
+- The list header's **All | Unread** segmented control (`role="radiogroup"`, aria `Show all or only unread emails`).
 
 ## Driving it with verify.sh
 
@@ -28,6 +30,11 @@ Preconditions: baseline; account `demo-acct-work` selected (default). `R=$(readl
 - Categories → `$V wd click 'button=Promotions'` → the row set in `$V wd find 'div[role="button"]'` differs from the Primary one; `$V wd click 'button=Primary'` restores it.
 - Remote images → search `Harborlight`, open *Harborlight Weekly: shipping notes* → the page says *Remote images were blocked to protect your privacy.* with **Show images** and **Always trust this sender**; `$V wd js 'document.querySelector("iframe[title=\\"Email content\\"]").getAttribute("srcdoc").match(/<img[^>]*>/)[0]'` prints the `<img>` without its `src`, and the frame's CSP allows only `img-src data: blob: cid:`. Do not click **Show images** (it asks the sender's server). Confirmed live on 30/09/2026.
 
+- Unread → `$V wd click 'button=Unread'` → `$V wd js '[...document.querySelectorAll("[role=radio]")].map(b=>b.textContent+":"+b.getAttribute("aria-checked")).join(",")'` prints `"All:false,Unread:true"`; `$V wd js 'document.querySelectorAll("div[role=button]").length'` prints the unread thread count of the view (6 in `demo-acct-work`'s inbox on a fresh demo DB: Nadia Brunner, Marisol Vega, Juan Ramírez, two BorgBase, Hetzner) and the list ends in *No more emails*. Open the Nadia Brunner row and go **Back**: the row is still listed, now read. `$V wd click 'button=All'` restores the full list.
+- Unread on a filter → type `tag:priority=urgent` in the list search + Enter → the toggle is `present` and Unread/All list 1/2 rows; type a plain word (`invoice`) instead → `$V wd exists '[role="radiogroup"]'` prints `absent`.
+
+Live run 14/10/2026 (T-0014): Unread proven on the work inbox (6 rows), the unified inbox (4 rows under the Primary tab), a `tag:` filter (1 vs 2) and Sent (0 vs 12); opening a thread kept it listed; evidence in `src-tauri/reports/verify/20261014-155030/`.
+
 Live run 11/09/2026: open and close proven on the *Nadia Brunner* and *Marisol Vega · Production bug* rows; evidence in `src-tauri/reports/verify/20260911-141357/`.
 
 ## Gotchas
@@ -35,6 +42,8 @@ Live run 11/09/2026: open and close proven on the *Nadia Brunner* and *Marisol V
 - Rows are thread rows: a thread with replies shows only its latest message's subject (`Re: …`); match on sender + a subject fragment, not on the exact original subject.
 - The reading pane's exit is **Back** (`button=Back`, title "Back to inbox"), not a Close button; "Close chat panel" belongs to the chat panel.
 - Opening a thread did **not** flip `is_read` on an older unread message of that thread in the live run; do not use `emails.is_read` as this feature's side-effect proof without first checking what the app marks.
+- Off-Space window (`document.visibilityState` is `hidden`): the toggle's `transition-colors` never finishes, so a screenshot can show the old option highlighted while `aria-checked` is already right. Read `aria-checked`, not the colour.
+- An empty Unread list says *No unread emails* only when no sync is running: *Syncing emails...* wins, and on the demo instance the credential-less accounts can keep a sync up for a while (Sent stayed on it in the 14/10 run).
 - The list is virtualised; a row far down needs a scroll (`$V wd js 'document.querySelector("[data-virtual-list], main").scrollBy(0, 800)'` or cua-driver `scroll`) before it is clickable.
 
 | Case | Test kind |
@@ -42,6 +51,7 @@ Live run 11/09/2026: open and close proven on the *Nadia Brunner* and *Marisol V
 | list queries, thread order, soft delete, mailbox state, redownload | unit (`db::emails::*`, `services::emails::*`) |
 | HTML sanitising, remote content blocking (images, background images, media) | unit + vitest (`util::html`, `emailFormatting`, `EmailHtmlFrame.*`, `EmailPreviewById.*`) |
 | stale responses, auto-select, navigation | vitest (`emailStore.*`, `Inbox.*`) |
+| unread filter: list + count + filters SQL, thread-level read dot, toggle, refetch | unit (`db::emails::crud` / `search` / `mailbox_state` `*unread*`, `services::emails::list_tests`) + vitest (`emailStore.unreadOnly`, `useEmails`, `Inbox.unreadToggle`) |
 | lists, threads, read state, deletes against the in-memory DB | integration (`*email*`, `*thread*`, `*mailbox*`, `mark_as_read_*`) |
 | email command arguments | contract (`src/lib/apiContract/inbox.api.test.ts`) |
 | list, open, back, row menu, remote images blocked, Sent / Spam / Deleted / Attachments views | e2e (`Inbox/*`, `Vistas/*`) |

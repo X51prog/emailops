@@ -493,11 +493,19 @@ mod tests {
     }
 
     fn inbox_ids(db: &Arc<Database>, account_id: &str) -> Vec<String> {
-        db.get_emails(AccountScope::Account(account_id), 50, 0, None, Some("inbox"), None)
-            .unwrap()
-            .into_iter()
-            .map(|e| e.id)
-            .collect()
+        db.get_emails(
+            AccountScope::Account(account_id),
+            50,
+            0,
+            None,
+            Some("inbox"),
+            None,
+            false,
+        )
+        .unwrap()
+        .into_iter()
+        .map(|e| e.id)
+        .collect()
     }
 
     // An account whose provider has no server-side mailbox writes deletes

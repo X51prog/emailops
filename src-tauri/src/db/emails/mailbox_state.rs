@@ -311,6 +311,62 @@ impl Database {
         plan
     }
 
+    /// Which of `threads` (`(account_id, thread_id)`) have a live unread
+    /// message — a thread is unread when any of its messages is.
+    pub fn unread_threads(&self, threads: &[(&str, &str)]) -> Result<std::collections::HashSet<(String, String)>> {
+        let mut unread = std::collections::HashSet::new();
+        if threads.is_empty() {
+            return Ok(unread);
+        }
+        let conn = self.reader();
+        // Two binds per thread; stay well under SQLite's variable limit.
+        for chunk in threads.chunks(400) {
+            let sql = Self::unread_threads_sql(chunk.len());
+            let mut bound: Vec<&dyn rusqlite::ToSql> = Vec::with_capacity(chunk.len() * 2);
+            for (account_id, thread_id) in chunk {
+                bound.push(account_id);
+                bound.push(thread_id);
+            }
+            let mut stmt = conn.prepare(&sql)?;
+            let rows = stmt.query_map(bound.as_slice(), |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?;
+            for row in rows {
+                unread.insert(row?);
+            }
+        }
+        Ok(unread)
+    }
+
+    /// SQL behind [`Database::unread_threads`]; the index hint is load-bearing
+    /// for the same reason as in [`Database::starred_threads_sql`].
+    fn unread_threads_sql(pairs: usize) -> String {
+        let values = vec!["(?, ?)"; pairs].join(", ");
+        format!(
+            "WITH wanted(account_id, thread_id) AS (VALUES {values})
+             SELECT DISTINCT e.account_id, e.thread_id
+             FROM wanted w CROSS JOIN emails e INDEXED BY idx_emails_thread_latest
+             WHERE e.account_id = w.account_id AND e.thread_id = w.thread_id
+               AND e.is_read = 0 AND e.is_deleted = 0"
+        )
+    }
+
+    /// `EXPLAIN QUERY PLAN` rows for [`Database::unread_threads`].
+    #[cfg(test)]
+    pub(crate) fn explain_unread_threads(&self, pairs: usize) -> Vec<String> {
+        let conn = self.reader();
+        let mut stmt = conn
+            .prepare(&format!("EXPLAIN QUERY PLAN {}", Self::unread_threads_sql(pairs)))
+            .unwrap();
+        let binds = vec!["x"; pairs * 2];
+        let mut rows = stmt.query(rusqlite::params_from_iter(binds)).unwrap();
+        let mut plan = Vec::new();
+        while let Some(row) = rows.next().unwrap() {
+            plan.push(row.get::<_, String>(3).unwrap());
+        }
+        plan
+    }
+
     /// The provider has the row's read state (or no longer has the message).
     pub fn clear_read_push_pending(&self, email_id: &str) -> Result<()> {
         self.connection().execute(
@@ -517,6 +573,39 @@ mod tests {
             std::collections::HashSet::from([("acc-1".to_string(), "t-a".to_string())])
         );
         assert!(db.starred_threads(&[]).unwrap().is_empty());
+    }
+
+    #[test]
+    fn unread_threads_are_the_threads_with_any_live_unread_message() {
+        let db = Database::new_for_testing().unwrap();
+        insert_email(&db, "a1", "acc-1", "t-a", 100);
+        insert_email(&db, "a2", "acc-1", "t-a", 200);
+        insert_email(&db, "b1", "acc-1", "t-b", 100);
+        insert_email(&db, "c1", "acc-1", "t-c", 100);
+        insert_email(&db, "same-thread-other-account", "acc-2", "t-b", 100);
+        db.set_read_local("a2", true).unwrap();
+        db.set_read_local("b1", true).unwrap();
+        db.delete_email("c1").unwrap();
+
+        let unread = db
+            .unread_threads(&[("acc-1", "t-a"), ("acc-1", "t-b"), ("acc-1", "t-c")])
+            .unwrap();
+
+        assert_eq!(
+            unread,
+            std::collections::HashSet::from([("acc-1".to_string(), "t-a".to_string())])
+        );
+        assert!(db.unread_threads(&[]).unwrap().is_empty());
+    }
+
+    #[test]
+    fn unread_threads_seeks_each_thread_instead_of_walking_the_account() {
+        let db = Database::new_for_testing().unwrap();
+
+        let plan = db.explain_unread_threads(50).join("\n");
+
+        assert!(plan.contains("idx_emails_thread_latest"), "{plan}");
+        assert!(!plan.contains("idx_emails_sender_stats"), "{plan}");
     }
 
     #[test]

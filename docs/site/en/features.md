@@ -79,6 +79,13 @@ Spam — the next one opens. **Settings → Appearance → After archiving or de
 between the next conversation, the previous one, or going back to the list. Marking a
 conversation as unread always goes back to the list.
 
+<!-- claim:feat-organize-6 -->
+**All** and **Unread** at the top of the list choose what it shows. **Unread** keeps only the
+conversations with an unread message — in views that list single messages, such as sent mail
+and folders, only the unread messages — in every view and with a smart filter on; it is hidden
+while you search. A conversation you open stays in the list until the list reloads, and the
+choice lasts until you quit EmailOps.
+
 ## Snooze {#snooze}
 
 <!-- claim:feat-snooze-1 -->

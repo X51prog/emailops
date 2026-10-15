@@ -173,8 +173,9 @@ pub fn get_filtered_emails(
         limit,
         offset,
     )?;
-    // One row per conversation: its star is the thread's.
+    // One row per conversation: its star and read state are the thread's.
     crate::services::emails::widen_stars_to_threads(db, &mut result.emails)?;
+    crate::services::emails::widen_unread_to_threads(db, &mut result.emails)?;
     Ok(result)
 }
 

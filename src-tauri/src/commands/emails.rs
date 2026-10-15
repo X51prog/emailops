@@ -42,7 +42,8 @@ fn emit_log(_app: &AppHandle, level: &str, source: &str, message: &str) {
 }
 
 /// `account_id: None` selects the unified ("All accounts") view — emails
-/// merged across every enabled account.
+/// merged across every enabled account. `unread_only` lists only the unread
+/// rows; omitted, every row.
 #[tauri::command]
 pub async fn get_emails(
     state: State<'_, AppState>,
@@ -50,6 +51,7 @@ pub async fn get_emails(
     limit: Option<i32>,
     offset: Option<i32>,
     mailbox: Option<String>,
+    unread_only: Option<bool>,
 ) -> Result<Vec<Email>, AppError> {
     services::emails::get_emails(
         &state.db,
@@ -58,6 +60,7 @@ pub async fn get_emails(
         offset.unwrap_or(0),
         mailbox.as_deref(),
         None,
+        unread_only.unwrap_or(false),
     )
 }
 
@@ -878,19 +881,22 @@ pub async fn get_email_by_id(
 
 /// `account_id: None` counts across every enabled account (unified "All
 /// accounts" view). `mailbox` selects the view to count — omit it for the
-/// inbox. It must match the `mailbox` passed to `get_emails`, since the UI
-/// compares the two to decide whether more pages remain.
+/// inbox. It and `unread_only` must match what is passed to `get_emails`,
+/// since the UI compares the two to decide whether more pages remain.
 #[tauri::command]
 pub async fn get_email_count(
     state: State<'_, AppState>,
     account_id: Option<String>,
     mailbox: Option<String>,
+    unread_only: Option<bool>,
 ) -> Result<i32, AppError> {
     let scope = match account_id.as_deref() {
         Some(id) => crate::db::AccountScope::Account(id),
         None => crate::db::AccountScope::AllEnabled,
     };
-    state.db.count_emails(scope, mailbox.as_deref())
+    state
+        .db
+        .count_emails(scope, mailbox.as_deref(), unread_only.unwrap_or(false))
 }
 
 #[tauri::command]
