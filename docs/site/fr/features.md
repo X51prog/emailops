@@ -88,6 +88,14 @@ déplacée dans les spams —, la suivante s'ouvre. **Paramètres → Apparence 
 la suppression** permet de choisir entre la conversation suivante, la précédente ou le retour à
 la liste. Marquer une conversation comme non lue ramène toujours à la liste.
 
+<!-- claim:feat-organize-6 -->
+**Tous** et **Non lus**, en haut de la liste, choisissent ce qu'elle affiche. **Non lus** ne garde
+que les conversations qui ont un message non lu — dans les vues qui listent des messages
+isolés, comme le courrier envoyé et les dossiers, seulement les messages non lus — dans toutes
+les vues et aussi avec un filtre intelligent ; pendant une recherche, il est masqué. Une
+conversation que vous ouvrez reste dans la liste jusqu'à son rechargement, et le choix dure
+jusqu'à ce que vous quittiez EmailOps.
+
 ## Mettre en attente {#snooze}
 
 <!-- claim:feat-snooze-1 -->

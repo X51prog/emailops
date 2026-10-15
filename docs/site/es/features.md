@@ -84,6 +84,13 @@ movida a Spam —, se abre la siguiente. **Ajustes → Apariencia → Después d
 elige entre la conversación siguiente, la anterior o volver a la lista. Marcar una conversación
 como no leída siempre vuelve a la lista.
 
+<!-- claim:feat-organize-6 -->
+**Todos** y **No leídos**, encima de la lista, eligen qué muestra. **No leídos** deja solo las
+conversaciones con algún mensaje sin leer — en las vistas que listan mensajes sueltos, como el
+correo enviado y las carpetas, solo los mensajes sin leer — en todas las vistas y también con un
+filtro inteligente; mientras buscas, no aparece. Una conversación que abres sigue en la lista
+hasta que esta se recarga, y la elección dura hasta que cierras EmailOps.
+
 ## Posponer {#snooze}
 
 <!-- claim:feat-snooze-1 -->

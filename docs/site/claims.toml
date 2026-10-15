@@ -756,6 +756,13 @@ checks = [
   { manual = 'Deleted, snoozed and moved-to-Spam advancing, and Mark as unread going back to the list, are covered by src/lib/autoAdvance.test.ts and the EmailView/JunkBanner vitest suites; the demo case only archives.', covers = ["Marking a conversation as unread always goes back to the list."] },
 ]
 
+[feat-organize-6]
+checks = [
+  { app = true },
+  { tests = ['db::emails::crud::tests::a_flat_view_lists_only_its_own_unread_messages', 'db::emails::search::tests::an_unread_filter_lists_threads_with_any_unread_message', 'db::emails::search::tests::an_unread_tag_filter_lists_threads_with_any_unread_message'], covers = ["in views that list single messages, such as sent mail and folders, only the unread messages", "and with a smart filter on"] },
+  { manual = 'Hidden during a search and lasting until quit are covered by src/components/Inbox/Inbox.unreadToggle.test.tsx and src/stores/emailStore.unreadOnly.test.ts (vitest); the demo phase does not relaunch the app or type in the list search box.', covers = ["it is hidden while you search.", "the choice lasts until you quit EmailOps."] },
+]
+
 [feat-snooze-1]
 checks = [
   { app = true },

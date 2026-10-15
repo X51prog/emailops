@@ -944,6 +944,30 @@ export default (h) => async function demoCases() {
     return ok(opts.length === 3 && /next/i.test(opts[0]) && /previous/i.test(opts[1]) && /list/i.test(opts[2]), opts.join(' / '), `opciones: ${opts.join(' / ') || 'sin desplegable'}`);
   });
 
+  // All / Unread: Unread narrows the inbox to unread rows; an opened one stays.
+  await view('Inbox');
+  const rfClick = (label) => js((l) => { const x = [...document.querySelectorAll('[role="radiogroup"] [role="radio"]')].find((y) => y.textContent.trim() === l); x?.click(); return !!x; }, label);
+  const rfDots = () => js(() => [...document.querySelectorAll('div[role="button"]')].filter((r) => r.offsetParent && r.querySelector('[data-testid="row-select"]')).map((r) => !!r.querySelector('.ring-primary-100')));
+  const [rfAll, rfUnread] = bold('feat-organize-6');
+  const rfRowsAll = (await listRows()).length;
+  const rfOn = await rfClick(rfUnread);
+  await sleep(1500);
+  const rfFlags = await rfDots();
+  const rfFirst = (await listRows())[0] || '';
+  await openThread(rfFirst.slice(0, 30));
+  await press('Back').catch(() => {});
+  await sleep(1200);
+  const rfStill = await hasRow(rfFirst.slice(0, 30));
+  await rfClick(rfAll);
+  await sleep(1500);
+  const rfBack = (await listRows()).length;
+  await claim('feat-organize-6', 'Todos / No leídos', {
+    covers: ['All and Unread at the top of the list choose what it shows.', 'Unread keeps only the conversations with an unread message', 'A conversation you open stays in the list until the list reloads'],
+    how: 'En el Inbox pulsa «Unread»: quedan menos filas y todas con el punto de no leído; abre la primera y vuelve, y sigue en la lista. «All» devuelve todas.',
+  }, async () => ok(rfOn && rfFlags.length > 0 && rfFlags.length < rfRowsAll && rfFlags.every(Boolean) && rfStill && rfBack === rfRowsAll,
+    `${rfFlags.length} de ${rfRowsAll} filas con «${rfUnread}», todas sin leer; la abierta sigue; «${rfAll}» vuelve a ${rfBack}`,
+    `toggle=${rfOn}, filas ${rfFlags.length}/${rfRowsAll}, sin leer=${rfFlags.filter(Boolean).length}, sigue=${rfStill}, al volver=${rfBack}`));
+
   // Snooze: the row menu's presets, the Snoozed view, Unsnooze.
   await view('Inbox');
   await rowMenu('Kwame Boateng');
