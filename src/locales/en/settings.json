@@ -64,7 +64,8 @@
     "switchAccountTitle": "Switch account?",
     "switchAccountConfirm": "Any unsaved changes will be lost.",
     "switchAction": "Switch",
-    "experimental": "Experimental"
+    "experimental": "Experimental",
+    "sponsor": "Sponsor the project ♥"
   },
   "ai": {
     "title": "AI Settings",

@@ -64,7 +64,8 @@
     "switchAccountTitle": "Changer de compte ?",
     "switchAccountConfirm": "Toute modification non enregistrée sera perdue.",
     "switchAction": "Changer",
-    "experimental": "Expérimental"
+    "experimental": "Expérimental",
+    "sponsor": "Soutenir le projet ♥"
   },
   "ai": {
     "title": "Paramètres IA",

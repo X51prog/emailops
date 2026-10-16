@@ -64,7 +64,8 @@
     "switchAccountTitle": "Konto wechseln?",
     "switchAccountConfirm": "Nicht gespeicherte Änderungen gehen verloren.",
     "switchAction": "Wechseln",
-    "experimental": "Experimentell"
+    "experimental": "Experimentell",
+    "sponsor": "Projekt unterstützen ♥"
   },
   "ai": {
     "title": "KI-Einstellungen",

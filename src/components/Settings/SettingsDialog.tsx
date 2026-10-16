@@ -1,9 +1,12 @@
+import { open as openExternal } from '@tauri-apps/plugin-shell';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LanguageSelect } from '@/components/shared/LanguageSelect';
 import { Select } from '@/components/shared/Select';
 import { useUiLanguage } from '@/i18n';
+import { errorText } from '@/lib/errors';
 import { useAiStore } from '@/stores/aiStore';
+import { useLogStore } from '@/stores/logStore';
 import { useOverlay } from '@/stores/overlayStore';
 import type { Account, InboxLayout } from '@/types';
 import { AiDraftsSettings } from './AiDraftsSettings';
@@ -25,6 +28,8 @@ import { SignaturesSettings } from './SignaturesSettings';
 import { SkillsSettings } from './SkillsSettings';
 import { TasksSettings } from './TasksSettings';
 import { UndoSendSetting } from './UndoSendSetting';
+
+const SPONSOR_URL = 'https://github.com/sponsors/emailops';
 
 export type SettingsTab =
   | 'appearance'
@@ -113,6 +118,7 @@ export function SettingsDialog({
   // off. AI Backend & Models stays so the user can re-enable AI from there.
   const { t } = useTranslation(['common', 'settings']);
   const { enabled: aiEnabled } = useAiStore();
+  const { addLog } = useLogStore();
   const visibleTabs = useMemo(() => (aiEnabled ? ALL_TABS : ALL_TABS.filter((t) => !t.needsAi)), [aiEnabled]);
   const [tab, setTab] = useState<SettingsTab>(() =>
     visibleTabs.some((t) => t.id === initialTab) ? initialTab : 'appearance',
@@ -136,6 +142,12 @@ export function SettingsDialog({
     },
     [onClose],
   );
+
+  const handleOpenSponsor = useCallback(() => {
+    void openExternal(SPONSOR_URL).catch((e) => {
+      addLog('error', 'system', `Failed to open the sponsor page: ${errorText(e)}`);
+    });
+  }, [addLog]);
 
   const handleAccountChange = (newId: string) => {
     if (newId === selectedAccountId) return;
@@ -187,6 +199,13 @@ export function SettingsDialog({
             ))}
           </nav>
           <div className="px-4 pt-3 mt-1 border-t border-gray-700">
+            <button
+              type="button"
+              onClick={handleOpenSponsor}
+              className="w-full mb-1 px-3 py-1.5 text-xs text-gray-400 hover:text-gray-200 rounded transition-colors"
+            >
+              {t('settings:dialog.sponsor')}
+            </button>
             <button
               onClick={onClose}
               className="w-full px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-gray-700 rounded transition-colors"
