@@ -3703,3 +3703,26 @@ glibc floor would cost users and gain nothing.
 repeat the earlier "GLIBC_2.38 not found" regression on 22.04 for no gain. Relying on the
 newer WebKitGTK alone is not enough either: nobody has confirmed that 2.52 fixes the Skia
 bug. Shipping Flatpak or RPM packages is a larger, separate piece of work.
+
+## 2026-10-17 — Dark theme by palette remap, with the dark-by-design chrome pinned
+
+**Decision:** The dark theme is one class on `<html>` (`html.dark`, set from the `ui_theme`
+SQLite preference before React mounts — light, dark, or system). Under it `src/index.css`
+remaps the Tailwind gray scale, turns `bg-white` into a dark surface and gives the pale
+accent tints (`bg-red-50`, `text-primary-700`…) dark counterparts; components keep their
+light-theme classes. Surfaces that are dark in both themes (sidebar, settings, modals,
+Lenses, EO Docs, onboarding, dashboard, log panel, toasts) carry `theme-pinned`, which
+restores the original scale. Email bodies stay on the light scheme inside their iframe.
+`src/lib/darkPalette.test.ts` fails when a component uses a pale accent class with no override.
+**Context:** The components hold ~4,500 colour utilities in 170 files, split between a dark
+chrome and a light content area. Tailwind v4 compiles each utility to `var(--color-…)`, so
+one remap reaches every variant (hover, focus, group) with no `dark:` twin per class; the
+brand palette moved from `tailwind.config.js` to `@theme` for the same reason (a JS colour
+is inlined as a literal). Issue #180 asks for light, dark and system modes that persist and
+for email HTML to render independently of the app theme.
+**Rejected:** A `dark:` class beside every utility — a 170-file diff, repeated for every new
+component, with nothing to catch an omission. Semantic tokens (`bg-surface`, `text-muted`) —
+the better end state, but the same sweep; it can be done incrementally on top of this.
+Rendering email bodies dark — email HTML is designed for its own background, and the
+reading pane already pins the light scheme to keep newsletters' dark-mode rules from
+breaking them.

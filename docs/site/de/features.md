@@ -376,6 +376,12 @@ Posteingang in geteilter Ansicht oder in voller Breite, und eine Oberfläche auf
 Englisch, Spanisch und Französisch. Die Ausgabesprache der KI wird separat eingestellt — Sie
 können die Oberfläche in einer Sprache lesen und Antworten in einer anderen entwerfen lassen.
 
+<!-- claim:feat-interface-2 -->
+EmailOps hat ein helles und ein dunkles Farbschema. **Einstellungen → Erscheinungsbild →
+Farbschema** bietet **Hell**, **Dunkel** und **System**, das dem Erscheinungsbild des
+Betriebssystems folgt; die Wahl bleibt über Neustarts erhalten. E-Mails behalten die Farben,
+die ihr Absender ihnen gegeben hat, unabhängig vom Farbschema der App.
+
 ## Tastenkombinationen {#keyboard-shortcuts}
 
 <!-- claim:feat-shortcuts-1 -->

@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Dark theme.** **Settings → Appearance → Theme** chooses **Light**, **Dark** or
+  **System**, which follows the operating system; the choice survives restarts
+  and the window title bar follows it. The sidebar, settings and dialogs keep
+  their look, and email messages keep their own colours whichever theme the app
+  uses.
 - **About tab in Settings** with the app version and links to the website,
   the source code and the new GitHub Sponsors page: EmailOps now accepts
   sponsorships. If you find it useful, **Sponsor the project** in Settings →

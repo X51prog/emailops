@@ -27,6 +27,12 @@ afterEach(() => {
 });
 
 describe('EmailHtmlFrame colour scheme', () => {
+  it('paints its own light canvas so the email reads the same on the dark theme', () => {
+    // The app's dark theme turns the reading pane dark; the frame must not
+    // let it show through behind a message that sets no background.
+    expect(FRAME_BASE_CSS).toMatch(/html \{\s*background: #fff;\s*\}/);
+  });
+
   it('drops a dark-scheme media rule and keeps the plain rules', () => {
     const sheet = loadEmailStyles(`
       p { color: #111111; }

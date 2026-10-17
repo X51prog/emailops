@@ -730,6 +730,12 @@ checks = [
   { app = true },
 ]
 
+[feat-interface-2]
+checks = [
+  { judge = "Open Settings → Appearance. Are Light, Dark and System offered under Theme, does choosing Dark turn the inbox, reading pane and chat dark at once while the sidebar and the settings dialog keep their look, and is the choice still there after a relaunch?", evidence = ["file:src/components/Settings/ThemeSetting.tsx", "file:src/stores/themeStore.ts", "file:src/index.css"], visual = true, covers = ["EmailOps has a light and a dark theme.", "Settings → Appearance → Theme offers Light, Dark and System, which follows the operating system's appearance; the choice is kept across restarts."] },
+  { file = 'src/components/shared/EmailHtmlFrame.tsx', has = 'color-scheme: light only', covers = ["Email messages keep the colours their sender gave them, whichever theme the app uses."] },
+]
+
 [feat-organize-1]
 checks = [
   { app = true },

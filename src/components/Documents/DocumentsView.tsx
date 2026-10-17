@@ -333,7 +333,7 @@ export function DocumentsView({ accountId }: DocumentsViewProps) {
   const shownError = actionError ?? error;
 
   return (
-    <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden bg-[#1e1e1e]" data-testid="documents-view">
+    <div className="theme-pinned flex flex-1 min-h-0 min-w-0 overflow-hidden bg-[#1e1e1e]" data-testid="documents-view">
       <aside className="w-72 flex-shrink-0 border-r border-gray-700 flex flex-col min-h-0">
         <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-700">
           <h2 className="text-sm font-semibold text-gray-200 flex-1 whitespace-nowrap">{t('documents:title')}</h2>

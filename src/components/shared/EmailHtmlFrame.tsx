@@ -238,10 +238,15 @@ export const BRIDGE_SCRIPT = String.raw`
 // Baseline styles inside the frame. Tailwind doesn't apply here — these
 // reproduce the look the previous div-based renderer had via utility classes.
 export const FRAME_BASE_CSS = `
-  /* The reading pane is light-only: resolve system colours (Canvas,
-     CanvasText, form controls) light even when the OS is in dark mode. */
+  /* The email renders light whatever the app or the OS shows: resolve system
+     colours (Canvas, CanvasText, form controls) light, and paint the canvas
+     white rather than letting the pane show through — on the app's dark
+     theme a message with no background of its own would otherwise be black
+     text on a dark pane. */
   :root { color-scheme: light only; }
-  html, body { margin: 0; padding: 0; background: transparent; }
+  html { background: #fff; }
+  html, body { margin: 0; padding: 0; }
+  body { background: transparent; }
   body {
     /* flow-root establishes a block formatting context so the first/last child's
        vertical margins stay *inside* the body instead of collapsing through it.

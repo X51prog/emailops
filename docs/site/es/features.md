@@ -369,6 +369,12 @@ Bandeja en vista dividida o a ancho completo, y una interfaz disponible en espa�
 francés y alemán. El idioma de salida de la IA se configura aparte, así que puedes leer la
 interfaz en un idioma y que los borradores se redacten en otro.
 
+<!-- claim:feat-interface-2 -->
+EmailOps tiene un tema claro y uno oscuro. **Ajustes → Apariencia → Tema** ofrece **Claro**,
+**Oscuro** y **Sistema**, que sigue la apariencia del sistema operativo; la elección se
+conserva entre reinicios. Los correos mantienen los colores que les dio su remitente, use el
+tema que use la aplicación.
+
 ## Atajos de teclado {#keyboard-shortcuts}
 
 <!-- claim:feat-shortcuts-1 -->
