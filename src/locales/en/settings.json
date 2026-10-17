@@ -40,7 +40,7 @@
     "language": "Display language",
     "languageHelp": "Choose the language used for menus, buttons, and other UI text. AI replies have a separate setting in the AI tab.",
     "theme": "Theme",
-    "themeHelp": "Light, dark, or whatever the system uses. Email messages keep their own colours.",
+    "themeHelp": "Light, dark, or whatever the system uses. Messages follow the dark theme whenever they can.",
     "themeLight": "Light",
     "themeLightDesc": "Always light",
     "themeDark": "Dark",

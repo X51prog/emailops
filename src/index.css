@@ -203,8 +203,8 @@ body {
  * What is deliberately untouched: `text-white` (button labels on coloured
  * backgrounds), the 300–600 accent steps (buttons, icons, badges on coloured
  * backgrounds), `black` overlays, and the `neutral` scale (dark-only screens).
- * Email bodies render in their own iframe pinned to the light scheme, so they
- * keep the colours their sender designed whatever the app theme.
+ * Email bodies render in their own iframe; `src/lib/emailScheme.ts` decides
+ * how they follow the dark theme (own dark styles, adapted, or left dark).
  *
  * `src/lib/darkPalette.test.ts` checks that every pale accent class used in
  * the components has an override here and that the gray remap is complete. */

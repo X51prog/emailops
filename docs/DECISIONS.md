@@ -3726,3 +3726,22 @@ the better end state, but the same sweep; it can be done incrementally on top of
 Rendering email bodies dark — email HTML is designed for its own background, and the
 reading pane already pins the light scheme to keep newsletters' dark-mode rules from
 breaking them.
+
+## 2026-10-17 — Email bodies follow the dark theme whenever they can
+
+**Decision:** On the dark theme a message body is shown dark when it can be (`src/lib/emailScheme.ts`,
+pure): a message that ships `@media (prefers-color-scheme: dark)` rules gets them applied
+unconditionally; a plain message or a light design (median luminance of its declared backgrounds
+≥ 0.5) is adapted with a hue-preserving luminance inversion on the body, undone on images, the
+way Dark Reader does; a design that is already dark is left on a dark canvas. On the light theme
+nothing changes. This supersedes the "email bodies stay light" part of the previous entry.
+**Context:** The developer wants a dark reading pane with dark messages wherever possible, not a
+white card in a dark app. The frame already parses the message's stylesheets through the CSSOM,
+so forcing its dark rules is the same mechanism that used to drop them; inversion is the only
+general way to make a design that knows nothing about dark mode readable without re-authoring it.
+**Rejected:** Keeping bodies light always — safe, but it is the one bright surface in an otherwise
+dark app. Only `color-scheme: dark` without inversion — a message with `color: #333` and no
+background becomes dark text on a dark canvas. Inverting everything — a design that is already
+dark would turn light, and a message with its own dark styles renders them better than any
+transformation. A per-message "show original colours" switch — a reasonable follow-up if the
+adaptation misfires on real newsletters; not needed to ship.

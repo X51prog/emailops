@@ -24,6 +24,7 @@ function mediaTexts(sheet: CSSStyleSheet): string[] {
 
 afterEach(() => {
   document.body.innerHTML = '';
+  document.documentElement.removeAttribute('data-dark-rules');
 });
 
 describe('EmailHtmlFrame colour scheme', () => {
@@ -75,6 +76,42 @@ describe('EmailHtmlFrame colour scheme', () => {
       @media (max-width: 600px) { td { display: block; } }
     `);
     expect(mediaTexts(sheet)).toEqual(['(prefers-color-scheme: light)', '(max-width: 600px)']);
+  });
+
+  describe('on the dark theme (data-dark-rules="force")', () => {
+    // `src/lib/emailScheme` picks this plan for a message that ships its own
+    // dark styles: they must apply whatever scheme the webview reports.
+    function loadForced(css: string): CSSStyleSheet {
+      document.documentElement.setAttribute('data-dark-rules', 'force');
+      return loadEmailStyles(css);
+    }
+
+    it('makes a dark-scheme rule unconditional', () => {
+      const sheet = loadForced(`
+        p { color: #111111; }
+        @media (prefers-color-scheme: dark) { p { color: #ffffff; } }
+      `);
+      expect(mediaTexts(sheet)).toEqual(['all']);
+      expect(sheet.cssRules).toHaveLength(2);
+    });
+
+    it('drops a light-scheme rule', () => {
+      const sheet = loadForced(`
+        @media (prefers-color-scheme: light) { p { color: #000000; } }
+        @media (max-width: 600px), (prefers-color-scheme: light) { td { display: block; } }
+      `);
+      expect(mediaTexts(sheet)).toEqual(['(max-width: 600px)']);
+    });
+
+    it('reaches rules nested inside another grouping rule', () => {
+      const sheet = loadForced(`
+        @media screen {
+          @media (prefers-color-scheme: dark) { a { color: #ffffff; } }
+        }
+      `);
+      const outer = sheet.cssRules[0] as CSSMediaRule;
+      expect(mediaTexts(outer as unknown as CSSStyleSheet)).toEqual(['all']);
+    });
   });
 
   it('pins the frame document to the light scheme so system colours resolve light', () => {

@@ -379,8 +379,10 @@ können die Oberfläche in einer Sprache lesen und Antworten in einer anderen en
 <!-- claim:feat-interface-2 -->
 EmailOps hat ein helles und ein dunkles Farbschema. **Einstellungen → Erscheinungsbild →
 Farbschema** bietet **Hell**, **Dunkel** und **System**, das dem Erscheinungsbild des
-Betriebssystems folgt; die Wahl bleibt über Neustarts erhalten. E-Mails behalten die Farben,
-die ihr Absender ihnen gegeben hat, unabhängig vom Farbschema der App.
+Betriebssystems folgt; die Wahl bleibt über Neustarts erhalten. Im dunklen Farbschema werden auch
+E-Mails dunkel angezeigt, wann immer es möglich ist: eine E-Mail mit eigenem dunklem Design nutzt
+es, eine einfache E-Mail oder ein helles Design wird angepasst, und ein bereits dunkles Design
+bleibt, wie es ist.
 
 ## Tastenkombinationen {#keyboard-shortcuts}
 

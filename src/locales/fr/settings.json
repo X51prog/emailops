@@ -40,7 +40,7 @@
     "language": "Langue de l'interface",
     "languageHelp": "Choisissez la langue des menus, boutons et autres textes de l'interface. Les réponses de l'IA se configurent séparément dans l'onglet IA.",
     "theme": "Thème",
-    "themeHelp": "Clair, sombre ou celui du système. Les e-mails gardent leurs propres couleurs.",
+    "themeHelp": "Clair, sombre ou celui du système. Les e-mails suivent le thème sombre dès que c'est possible.",
     "themeLight": "Clair",
     "themeLightDesc": "Toujours clair",
     "themeDark": "Sombre",

@@ -40,7 +40,7 @@
     "language": "Anzeigesprache",
     "languageHelp": "Wähle die Sprache für Menüs, Schaltflächen und sonstige Oberflächentexte. KI-Antworten haben eine eigene Einstellung im Tab \"KI\".",
     "theme": "Farbschema",
-    "themeHelp": "Hell, dunkel oder wie das System. E-Mails behalten ihre eigenen Farben.",
+    "themeHelp": "Hell, dunkel oder wie das System. E-Mails folgen dem dunklen Farbschema, wann immer es möglich ist.",
     "themeLight": "Hell",
     "themeLightDesc": "Immer hell",
     "themeDark": "Dunkel",

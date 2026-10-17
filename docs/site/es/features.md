@@ -372,8 +372,9 @@ interfaz en un idioma y que los borradores se redacten en otro.
 <!-- claim:feat-interface-2 -->
 EmailOps tiene un tema claro y uno oscuro. **Ajustes → Apariencia → Tema** ofrece **Claro**,
 **Oscuro** y **Sistema**, que sigue la apariencia del sistema operativo; la elección se
-conserva entre reinicios. Los correos mantienen los colores que les dio su remitente, use el
-tema que use la aplicación.
+conserva entre reinicios. Con el tema oscuro, los correos también se muestran oscuros siempre que
+es posible: un correo que trae su propio diseño oscuro lo usa, uno sencillo o de diseño claro se
+adapta, y uno que ya es oscuro se deja tal cual.
 
 ## Atajos de teclado {#keyboard-shortcuts}
 
