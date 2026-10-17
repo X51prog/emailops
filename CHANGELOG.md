@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Linux: every dropdown follows the theme.** The chat's account and
+  conversation pickers, EO Docs' kind and folder selects and the onboarding
+  language picker were native `<select>` elements, whose popup WebKitGTK
+  paints light whatever the app's theme; they now use the same owned dropdown
+  as the rest of the app (native on macOS and Windows, where the popup follows
+  the theme).
 - Adding a column to a Lens (or editing its prompt) and running the backfill
   again now fills the new column for emails the Lens had already extracted,
   keeping values edited by hand.

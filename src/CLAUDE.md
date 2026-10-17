@@ -154,6 +154,7 @@ export const useAccountStore = create<AccountStore>((set) => ({
 - Surfaces that are dark in both themes (sidebar, settings, modals, Lenses, EO Docs, onboarding, dashboard, log panel, toasts) carry `theme-pinned` on their root, which restores the original gray scale. A new dark-by-design dialog needs the class on its shell; `common/Modal.tsx` already has it.
 - On light surfaces use the **gray** scale and the accent steps 50–200 (tints) / 600–900 (text); `slate`/`zinc`/`neutral` are not remapped and will stay light. Never paint a light surface with an inline `style` colour or an arbitrary `bg-[#fff]` — a class is what the remap reaches (the virtual list's row wrapper was the one case).
 - Email bodies are the one surface the remap does not reach (they live in an iframe); see "Email HTML Rendering" above for how they follow the dark theme.
+- Dropdowns go through `shared/Select.tsx` (`LanguageSelect` for the UI language), never a raw `<select>`: WebKitGTK paints a native popup light whatever the theme, so on Linux the component owns the popup; macOS and Windows keep the native control. `Select.nativeGuard.test.ts` enforces it; `testId` puts a `data-testid` on whichever element is the control.
 - `src/lib/darkPalette.test.ts` fails when a component uses a pale accent class (`bg-teal-50`, `text-orange-700`, `bg-red-50/40`…) that `index.css` has no override for; add the colour to the generated block rather than skipping the test.
 
 ### Tauri 2 Specifics (frontend-visible)

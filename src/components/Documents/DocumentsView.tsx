@@ -1,5 +1,6 @@
 import { type DragEvent, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Select } from '@/components/shared/Select';
 import * as api from '@/lib/api';
 import { isDocDrag, readDocDrag, writeDocDrag } from '@/lib/docDrag';
 import { childFolders, folderPath } from '@/lib/docFolders';
@@ -424,15 +425,18 @@ export function DocumentsView({ accountId }: DocumentsViewProps) {
             />
             <div className="flex gap-2">
               {creating === 'doc' && (
-                <select
-                  data-testid="shared-doc-new-kind"
+                <Select
+                  testId="shared-doc-new-kind"
+                  ariaLabel={t('documents:kind.doc')}
                   value={kind}
-                  onChange={(e) => setKind(e.target.value === 'sheet' ? 'sheet' : 'doc')}
-                  className="flex-1 px-2 py-1 text-xs rounded bg-gray-800 border border-gray-600 text-gray-200"
-                >
-                  <option value="doc">{t('documents:kind.doc')}</option>
-                  <option value="sheet">{t('documents:kind.sheet')}</option>
-                </select>
+                  options={[
+                    { value: 'doc', label: t('documents:kind.doc') },
+                    { value: 'sheet', label: t('documents:kind.sheet') },
+                  ]}
+                  onChange={(v) => setKind(v === 'sheet' ? 'sheet' : 'doc')}
+                  size="xs"
+                  className="flex-1"
+                />
               )}
               <button
                 type="submit"

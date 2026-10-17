@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { type Language, NATIVE_NAMES, SUPPORTED_LANGUAGES, useUiLanguage } from '@/i18n';
+import { LanguageSelect } from '@/components/shared/LanguageSelect';
+import { useUiLanguage } from '@/i18n';
 import { useAiStore } from '@/stores/aiStore';
 import { useOverlay } from '@/stores/overlayStore';
 import type { InboxLayout } from '@/types';
@@ -119,20 +120,12 @@ function LanguagePicker() {
   const { t } = useTranslation(['common']);
   const { language, setLanguage } = useUiLanguage();
   return (
-    <select
-      aria-label={t('common:language.selectLabel')}
+    <LanguageSelect
+      ariaLabel={t('common:language.selectLabel')}
       value={language}
-      onChange={(e) => {
-        void setLanguage(e.target.value as Language);
-      }}
-      className="bg-[#333] text-gray-300 border border-gray-600 rounded px-2 py-1 text-xs focus:border-primary-500 outline-none"
-    >
-      {SUPPORTED_LANGUAGES.map((code) => (
-        <option key={code} value={code}>
-          {NATIVE_NAMES[code]}
-        </option>
-      ))}
-    </select>
+      onChange={(next) => void setLanguage(next)}
+      size="xs"
+    />
   );
 }
 
