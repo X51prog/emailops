@@ -453,6 +453,7 @@ checks = [
 [start-3-inbox-1]
 checks = [
   { app = true },
+  { judge = "In the onboarding's inbox-layout step, is a Theme choice (Light, Dark, System) shown under the layout cards with System selected on a fresh install, and does choosing Dark darken the app behind the wizard at once?", evidence = ["file:src/components/Onboarding/StepLayout.tsx", "file:src/components/shared/ThemeChoice.tsx"], visual = true, covers = ["The same step offers the theme: light, dark, or whatever the system uses."] },
 ]
 
 [start-4-connect-1]

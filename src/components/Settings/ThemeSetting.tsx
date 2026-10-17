@@ -1,108 +1,18 @@
-import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { errorText } from '@/lib/errors';
-import { THEME_PREFERENCES, type ThemePreference } from '@/lib/theme';
-import { useLogStore } from '@/stores/logStore';
-import { useThemeStore } from '@/stores/themeStore';
+import { ThemeChoice } from '@/components/shared/ThemeChoice';
 
 /**
- * Settings → Appearance → Theme. Three radio-like cards: light, dark, or
- * follow the system. The choice applies as it is clicked (`useThemeStore`
- * is optimistic) and is persisted as the `ui_theme` preference.
+ * Settings → Appearance → Theme: the shared three-way choice (light, dark,
+ * follow the system) under its heading. The onboarding's view step shows the
+ * same `ThemeChoice`.
  */
 export function ThemeSetting() {
   const { t } = useTranslation(['settings']);
-  const { preference, setPreference } = useThemeStore();
-  const { addLog } = useLogStore();
-
-  const choose = (next: ThemePreference) => {
-    setPreference(next).catch((e) => {
-      addLog('error', 'system', `Could not save the theme setting: ${errorText(e)}`);
-    });
-  };
-
   return (
     <section>
       <h3 className="text-sm font-semibold text-gray-300 mb-3">{t('settings:appearance.theme')}</h3>
       <p className="text-xs text-gray-500 mb-2">{t('settings:appearance.themeHelp')}</p>
-      <div className="grid grid-cols-3 gap-3" role="radiogroup" aria-label={t('settings:appearance.theme')}>
-        {THEME_PREFERENCES.map((value) => (
-          <ThemeOption
-            key={value}
-            selected={preference === value}
-            onClick={() => choose(value)}
-            label={t(LABEL_KEY[value])}
-            description={t(DESC_KEY[value])}
-            icon={ICONS[value]}
-          />
-        ))}
-      </div>
+      <ThemeChoice ariaLabel={t('settings:appearance.theme')} />
     </section>
   );
 }
-
-const LABEL_KEY = {
-  light: 'settings:appearance.themeLight',
-  dark: 'settings:appearance.themeDark',
-  system: 'settings:appearance.themeSystem',
-} as const;
-
-const DESC_KEY = {
-  light: 'settings:appearance.themeLightDesc',
-  dark: 'settings:appearance.themeDarkDesc',
-  system: 'settings:appearance.themeSystemDesc',
-} as const;
-
-// Module-scoped on purpose: a component defined inside another gets a new
-// identity every render and remounts (src/CLAUDE.md, "Component Identity").
-function ThemeOption({
-  selected,
-  onClick,
-  label,
-  description,
-  icon,
-}: {
-  selected: boolean;
-  onClick: () => void;
-  label: string;
-  description: string;
-  icon: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={selected}
-      onClick={onClick}
-      className={`flex flex-col items-start gap-2 p-3 rounded-lg border-2 text-left transition-colors ${
-        selected ? 'border-primary-500 bg-primary-500/10' : 'border-neutral-700 bg-neutral-800 hover:border-neutral-500'
-      }`}
-    >
-      <span className={selected ? 'text-primary-400' : 'text-neutral-400'}>{icon}</span>
-      <span className={`text-sm font-medium ${selected ? 'text-white' : 'text-neutral-300'}`}>{label}</span>
-      <span className="text-xs text-neutral-500">{description}</span>
-    </button>
-  );
-}
-
-const SunIcon = (
-  <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-    <circle cx="12" cy="12" r="4" />
-    <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
-  </svg>
-);
-
-const MoonIcon = (
-  <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-    <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" />
-  </svg>
-);
-
-const MonitorIcon = (
-  <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-    <rect x="3" y="4" width="18" height="12" rx="2" />
-    <path d="M8 20h8M12 16v4" />
-  </svg>
-);
-
-const ICONS: Record<ThemePreference, ReactNode> = { light: SunIcon, dark: MoonIcon, system: MonitorIcon };

@@ -63,7 +63,7 @@ export function OnboardingWizard({ currentLayout, onChangeLayout, onComplete }: 
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gray-900/95 p-6">
+    <div className="theme-pinned fixed inset-0 z-[100] flex items-center justify-center bg-gray-900/95 p-6">
       <div className="theme-pinned bg-[#1f1f20] border border-gray-700 rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh] overflow-hidden">
         <Header step={step} aiEnabled={aiEnabled} />
         <div className="flex-1 overflow-y-auto px-8 py-6">

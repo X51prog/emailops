@@ -10,8 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Dark theme.** **Settings → Appearance → Theme** chooses **Light**, **Dark** or
-  **System**, which follows the operating system; the choice survives restarts
-  and the window title bar follows it. The sidebar, settings and dialogs keep
+  **System**, which follows the operating system (the default); the onboarding's
+  inbox-layout step offers the same choice. The choice survives restarts and
+  the window title bar follows it. The sidebar, settings and dialogs keep
   their look. Messages follow the dark theme whenever they can: one that brings
   its own dark styles uses them, a plain message or a light design is adapted
   (with its images intact), and a design that is already dark is left alone.
