@@ -28,6 +28,10 @@ import { useThemeStore } from '@/stores/themeStore';
 export interface EmailHtmlFrameProps {
   /** Already-sanitized HTML. Callers run `sanitizeEmailHtml(Full)` themselves. */
   html: string;
+  /** The message as received, read only for the colours it declares when
+   *  choosing the dark-theme rendering: sanitizing drops `<body>` and with it
+   *  a `bgcolor` that is often the page's only background. Defaults to `html`. */
+  schemeSource?: string;
   /** Optional substring to highlight in the rendered body. Case-insensitive. */
   highlightQuery?: string | null;
   /** Index of the occurrence inside this body that is the active search
@@ -350,6 +354,7 @@ ${csp}<meta charset="utf-8">
 
 export function EmailHtmlFrame({
   html,
+  schemeSource = html,
   highlightQuery,
   activeMatchIndex,
   onMatchesReported,
@@ -364,9 +369,9 @@ export function EmailHtmlFrame({
   useOverlay(confirmUrl !== null);
 
   // On the dark theme the message is shown dark whenever it can be; the
-  // planner reads the sanitized HTML, so the frame never looks inside the DOM.
+  // planner reads the message's markup, so the frame never looks inside the DOM.
   const scheme = useThemeStore((s) => s.scheme);
-  const plan = useMemo(() => planEmailScheme(html, scheme), [html, scheme]);
+  const plan = useMemo(() => planEmailScheme(schemeSource, scheme), [schemeSource, scheme]);
   const srcDoc = useMemo(() => buildSrcDoc(html, allowRemoteContent, plan), [html, allowRemoteContent, plan]);
 
   useEffect(() => {

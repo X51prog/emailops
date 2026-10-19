@@ -25,12 +25,17 @@ describe('relativeLuminance', () => {
     ['white', 1],
     ['black', 0],
     ['rgb(255, 255, 255)', 1],
-    ['rgba(0,0,0,0.5)', 0],
+    // A translucent colour is what it shows over the white page behind it.
+    ['rgba(0,0,0,0.5)', 0.21],
+    ['rgb(0,0,0,.1)', 0.79],
+    ['rgba(0, 0, 0, 10%)', 0.79],
+    ['#0000001a', 0.78],
   ])('%s → %s', (color, expected) => {
     expect(relativeLuminance(color)).toBeCloseTo(expected, 2);
   });
 
   it('returns null for colours it cannot read', () => {
+    expect(relativeLuminance('rgba(0,0,0,0)')).toBeNull();
     expect(relativeLuminance('transparent')).toBeNull();
     expect(relativeLuminance('url(x.png)')).toBeNull();
     expect(relativeLuminance('inherit')).toBeNull();
@@ -91,6 +96,13 @@ describe('planEmailScheme', () => {
       '<table><tr><td bgcolor="#000000">Header</td></tr><tr><td bgcolor="#ffffff">A</td></tr>' +
       '<tr><td bgcolor="#ffffff">B</td></tr></table>';
     expect(planEmailScheme(darkHeaderLightBody, 'dark').invert).toBe(true);
+  });
+
+  it('reads translucent overlays as the light page they tint, not as black', () => {
+    const lightPageWithOverlays =
+      '<div style="background:rgb(0,0,0,.1)">a</div><div style="background:rgb(0,0,0,.1)">b</div>' +
+      '<div style="background-color:rgba(0,0,0,.1)">c</div><a style="background-color:#155dff">Open</a>';
+    expect(planEmailScheme(lightPageWithOverlays, 'dark').invert).toBe(true);
   });
 
   it('treats unreadable background values as absent', () => {

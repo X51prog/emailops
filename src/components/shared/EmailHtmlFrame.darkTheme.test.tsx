@@ -75,4 +75,19 @@ describe('EmailHtmlFrame follows the theme store', () => {
     });
     expect(srcdoc()).toContain(INVERT);
   });
+
+  it('judges the scheme from the source message, whose <body> background the sanitizer drops', async () => {
+    useThemeStore.setState({ scheme: 'dark' });
+    const button = '<a style="background-color:#0b57d0;color:#fff">Check</a>';
+    await act(async () => {
+      root.render(
+        <EmailHtmlFrame
+          html={`<p style="color:rgba(0,0,0,.87)">Hi</p>${button}`}
+          schemeSource={`<body bgcolor="#FFFFFF"><p style="color:rgba(0,0,0,.87)">Hi</p>${button}</body>`}
+          allowRemoteContent={false}
+        />,
+      );
+    });
+    expect(srcdoc()).toContain(INVERT);
+  });
 });

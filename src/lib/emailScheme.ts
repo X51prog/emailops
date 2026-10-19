@@ -72,37 +72,46 @@ function firstColorToken(value: string): string | null {
   return null;
 }
 
-/** WCAG relative luminance (0 black … 1 white), or null when unreadable. */
+/**
+ * WCAG relative luminance (0 black … 1 white), or null when unreadable or
+ * fully transparent. A translucent colour counts as what it shows over the
+ * white page behind it: `rgba(0,0,0,.1)` is a light grey tint, not black.
+ */
 export function relativeLuminance(color: string): number | null {
-  const rgb = parseColor(color.trim());
-  if (!rgb) return null;
+  const parsed = parseColor(color.trim());
+  if (!parsed) return null;
+  const [rgb, alpha] = parsed;
+  if (alpha === 0) return null;
   const [r, g, b] = rgb.map((c) => {
+    c = c * alpha + 255 * (1 - alpha);
     const v = c / 255;
     return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
   });
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
-function parseColor(color: string): [number, number, number] | null {
-  const hex = color.match(/^#([0-9a-f]{3,8})$/i)?.[1];
+type Rgb = [number, number, number];
+
+/** The colour's channels and its alpha (0 … 1), or null when unreadable. */
+function parseColor(color: string): [Rgb, number] | null {
+  const short = color.match(/^#([0-9a-f]{3,4})$/i)?.[1];
+  const hex = short ? [...short].map((d) => d + d).join('') : color.match(/^#([0-9a-f]{6}|[0-9a-f]{8})$/i)?.[1];
   if (hex) {
-    if (hex.length === 3 || hex.length === 4) {
-      return [0, 1, 2].map((i) => Number.parseInt(hex[i] + hex[i], 16)) as [number, number, number];
-    }
-    if (hex.length === 6 || hex.length === 8) {
-      return [0, 2, 4].map((i) => Number.parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
-    }
-    return null;
+    const [r, g, b, a = 255] = (hex.match(/../g) ?? []).map((pair) => Number.parseInt(pair, 16));
+    return [[r, g, b], a / 255];
   }
-  const rgb = color.match(/^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i);
-  if (rgb) return [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])];
+  const rgb = color.match(/^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:[,/]\s*([\d.]+)(%?))?/i);
+  if (rgb) {
+    const alpha = rgb[4] === undefined ? 1 : Number(rgb[4]) / (rgb[5] ? 100 : 1);
+    return [[Number(rgb[1]), Number(rgb[2]), Number(rgb[3])], Math.min(1, alpha)];
+  }
   const named = NAMED_COLORS[color.toLowerCase()];
-  return named ?? null;
+  return named ? [named, 1] : null;
 }
 
 // The named colours that show up as email backgrounds. Anything else (and
 // `transparent`, `inherit`, `var(…)`) reads as "no colour declared".
-const NAMED_COLORS: Record<string, [number, number, number]> = {
+const NAMED_COLORS: Record<string, Rgb> = {
   white: [255, 255, 255],
   black: [0, 0, 0],
   gray: [128, 128, 128],
