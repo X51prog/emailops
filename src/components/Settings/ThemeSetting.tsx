@@ -10,7 +10,7 @@ export function ThemeSetting() {
   const { t } = useTranslation(['settings']);
   return (
     <section>
-      <h3 className="text-sm font-semibold text-gray-300 mb-3">{t('settings:appearance.theme')}</h3>
+      <h3 className="text-sm font-semibold text-gray-700 mb-3">{t('settings:appearance.theme')}</h3>
       <p className="text-xs text-gray-500 mb-2">{t('settings:appearance.themeHelp')}</p>
       <ThemeChoice ariaLabel={t('settings:appearance.theme')} />
     </section>

@@ -2,9 +2,10 @@
 //
 // The dark theme works by remapping the gray scale under `html.dark` and
 // overriding the pale accent utilities (`bg-red-50`, `text-primary-700`…) that
-// components put on light surfaces. Neither has a compiler to catch drift, so
-// this test does: every gray step must be remapped and restored for pinned
-// chrome, and every pale accent class a component uses must have an override.
+// components put on light surfaces. The sidebar and the dialogs (`theme-chrome`)
+// get the same remap on the light theme too, so they stay dark there. Neither
+// has a compiler to catch drift, so this test does: every gray step must be
+// remapped, and every pale accent class a component uses must have an override.
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -16,9 +17,12 @@ const ROOT = join(__dirname, '..');
 // formatter does to the file.
 const css = readFileSync(join(ROOT, 'index.css'), 'utf8').replace(/\s+/g, ' ');
 
+/** The variable block: the dark theme, and the chrome on either theme. */
+const PALETTE = '.dark, .theme-chrome';
+
 const GRAY_STEPS = ['50', '100', '200', '300', '400', '500', '600', '700', '800', '900', '950'];
 
-/** The `.dark { … }` block and the `.dark :where(.theme-pinned) { … }` block. */
+/** The rule block for `selector`, up to its first closing brace. */
 function block(selector: string): string {
   const start = css.indexOf(`${selector} {`);
   expect(start, `${selector} block`).toBeGreaterThan(-1);
@@ -40,27 +44,30 @@ const OVERRIDDEN =
 const NOT_ACCENTS = new Set(['gray', 'neutral', 'slate', 'zinc', 'stone', 'white', 'black']);
 
 describe('dark theme palette (src/index.css)', () => {
-  it('keys the dark variant on the html class, not the OS media query', () => {
-    expect(css).toContain('@custom-variant dark (&:where(.dark, .dark *));');
+  it('keys the dark variant on the html class and the chrome, not the OS media query', () => {
+    expect(css).toContain('@custom-variant dark (&:where(.dark, .dark *, .theme-chrome, .theme-chrome *));');
   });
 
   it('defines the brand palette in @theme so utilities compile to variables', () => {
     expect(css).toMatch(/@theme \{[^}]*--color-primary-600: #0284c7;/);
   });
 
-  it.each(GRAY_STEPS)('remaps gray-%s under .dark and restores it under theme-pinned', (step) => {
-    expect(block('.dark')).toMatch(new RegExp(`--color-gray-${step}: oklch\\(`));
-    expect(block('.dark :where(.theme-pinned)')).toMatch(new RegExp(`--color-gray-${step}: oklch\\(`));
+  it.each(GRAY_STEPS)('remaps gray-%s under .dark and inside the chrome', (step) => {
+    expect(block(PALETTE)).toMatch(new RegExp(`--color-gray-${step}: oklch\\(`));
   });
 
-  it('turns bg-white into the dark surface and restores it for pinned chrome', () => {
-    expect(css).toContain('.dark :where(.bg-white) { background-color: var(--eo-surface); }');
-    expect(block('.dark')).toContain('--eo-surface: oklch(');
-    expect(block('.dark :where(.theme-pinned)')).toContain('--eo-surface: #fff');
+  it('turns bg-white into the dark surface, on the chrome root as well', () => {
+    expect(css).toContain(':is(.dark, .theme-chrome) :where(.bg-white) { background-color: var(--eo-surface); }');
+    expect(css).toContain('.theme-chrome:where(.bg-white) { background-color: var(--eo-surface); }');
+    expect(block(PALETTE)).toContain('--eo-surface: oklch(');
+  });
+
+  it('gives every dark override to the chrome too', () => {
+    expect(css).not.toMatch(/(?<![(,] ?)\.dark :where\(/);
   });
 
   it('keeps the gray remap monotonic so layered surfaces stay distinguishable', () => {
-    const dark = block('.dark');
+    const dark = block(PALETTE);
     const lightness = (name: string): number => {
       const m = dark.match(new RegExp(`${name}: oklch\\(([0-9.]+)%`));
       if (!m) throw new Error(`${name} missing`);
@@ -70,6 +77,33 @@ describe('dark theme palette (src/index.css)', () => {
     for (let i = 1; i < scale.length; i++) {
       expect(lightness(scale[i]), `${scale[i]} lighter than ${scale[i - 1]}`).toBeGreaterThan(lightness(scale[i - 1]));
     }
+  });
+
+  // Every screen shares the inbox's surfaces (white on light, navy on dark), so
+  // a colour that cannot follow the theme — a pinned subtree, a hex literal, a
+  // scale the remap leaves alone — would make one screen differ from the rest.
+  it('keeps every screen on the theme-following palette', () => {
+    const offenders: string[] = [];
+    const FIXED = /\btheme-pinned\b|\b[a-z-]+-\[#[0-9a-fA-F]{3,8}\]|\b[a-z-]+-(?:neutral|zinc|slate|stone)-[0-9]+\b/g;
+    for (const file of tsxFiles(join(ROOT, 'components'))) {
+      for (const cls of readFileSync(file, 'utf8').match(FIXED) ?? []) {
+        offenders.push(`${file.slice(ROOT.length + 1)}: ${cls}`);
+      }
+    }
+    expect([...new Set(offenders)].sort()).toEqual([]);
+  });
+
+  // The sidebar and the dialogs keep their dark look on the light theme.
+  it.each([
+    'Sidebar/Sidebar.tsx',
+    'common/Modal.tsx',
+    'Settings/SettingsDialog.tsx',
+    'Sidebar/AccountSettingsDialog.tsx',
+    'Sidebar/AddAccountModal.tsx',
+    'AddImapAccountModal.tsx',
+    'shared/AiWorkInProgressDialog.tsx',
+  ])('%s carries theme-chrome', (file) => {
+    expect(readFileSync(join(ROOT, 'components', file), 'utf8')).toMatch(/\btheme-chrome\b/);
   });
 
   it('overrides every pale accent class the components use', () => {

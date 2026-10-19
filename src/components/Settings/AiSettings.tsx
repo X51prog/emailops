@@ -599,7 +599,7 @@ export function AiSettings() {
   if (loading && !config) {
     return (
       <SettingsPanel>
-        <p className="text-gray-400 text-sm p-6">{t('common:state.loading')}</p>
+        <p className="text-gray-500 text-sm p-6">{t('common:state.loading')}</p>
       </SettingsPanel>
     );
   }
@@ -609,7 +609,7 @@ export function AiSettings() {
       <SettingsPanel>
         <div className="p-6">
           {error && (
-            <div className="mb-4 p-3 bg-red-900/30 border border-red-800 rounded text-red-300 text-sm">{error}</div>
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">{error}</div>
           )}
           <button
             onClick={loadAll}
@@ -629,11 +629,11 @@ export function AiSettings() {
         // master switch is off, so the footer is only meaningful when AI is on.
         footer={
           aiEnabled && (
-            <div className="px-6 py-4 border-t border-gray-700 flex gap-2 flex-shrink-0">
+            <div className="px-6 py-4 border-t border-gray-200 flex gap-2 flex-shrink-0">
               <button
                 onClick={handleTest}
                 disabled={testing || !config.model}
-                className="px-4 py-2 bg-gray-700 text-gray-200 rounded text-sm hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 bg-gray-100 text-gray-800 rounded text-sm hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {testing ? t('settings:ai.testing') : t('settings:ai.test')}
               </button>
@@ -648,17 +648,17 @@ export function AiSettings() {
           )
         }
       >
-        {error && <div className="p-3 bg-red-900/30 border border-red-800 rounded text-red-300 text-sm">{error}</div>}
+        {error && <div className="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">{error}</div>}
         {success && (
-          <div className="p-3 bg-green-900/30 border border-green-800 rounded text-green-300 text-sm">{success}</div>
+          <div className="p-3 bg-green-50 border border-green-200 rounded text-green-700 text-sm">{success}</div>
         )}
 
         {/* ── Master AI toggle ────────────────────────────────────────────── */}
-        <section className="p-4 rounded-lg border border-gray-700 bg-[#2a2a2b]">
+        <section className="p-4 rounded-lg border border-gray-200 bg-gray-50">
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
-              <h3 className="text-sm font-semibold text-gray-100">{t('settings:ai.features')}</h3>
-              <p className="text-xs text-gray-400 mt-1">{t('settings:ai.featuresHelp')}</p>
+              <h3 className="text-sm font-semibold text-gray-900">{t('settings:ai.features')}</h3>
+              <p className="text-xs text-gray-500 mt-1">{t('settings:ai.featuresHelp')}</p>
             </div>
             <button
               type="button"
@@ -671,7 +671,7 @@ export function AiSettings() {
               }}
               aria-pressed={aiEnabled}
               className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                aiEnabled ? 'bg-primary-600' : 'bg-gray-600'
+                aiEnabled ? 'bg-primary-600' : 'bg-gray-300'
               }`}
             >
               <span
@@ -689,7 +689,7 @@ export function AiSettings() {
           <>
             {/* ── Backend selector ────────────────────────────────────────────── */}
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">{t('settings:ai.backend')}</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">{t('settings:ai.backend')}</label>
               <div className="flex gap-2">
                 <ProviderTab
                   active={config.provider === 'llamacpp'}

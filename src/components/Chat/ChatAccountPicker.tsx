@@ -45,7 +45,6 @@ export function ChatAccountPicker({ accountId, onChange, compact = false }: Chat
       onChange={(id) => id && onChange(id)}
       ariaLabel={t('chat:accountPicker.label')}
       title={t('chat:accountPicker.hint')}
-      variant="light"
       size={compact ? 'xs' : 'sm'}
       className={compact ? 'min-w-0 max-w-[11rem]' : 'min-w-0 max-w-full'}
     />

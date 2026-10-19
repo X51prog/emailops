@@ -64,7 +64,7 @@ export function OpenRouterPanel({
   return (
     <div className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-1">
+        <label className="block text-sm font-medium text-gray-700 mb-1">
           {t('settings:ai.apiKey')}
           {config.hasApiKey && <span className="text-gray-500 font-normal"> {t('settings:ai.apiKeySaved')}</span>}
         </label>
@@ -73,21 +73,21 @@ export function OpenRouterPanel({
           value={apiKey}
           onChange={(e) => setApiKey(e.target.value)}
           placeholder={config.hasApiKey ? '••••••••••••••••' : t('settings:openRouter.apiKeyPlaceholder')}
-          className="w-full bg-[#333] text-gray-200 border border-gray-600 rounded px-3 py-2 text-sm focus:border-primary-500 outline-none font-mono"
+          className="w-full bg-white text-gray-800 border border-gray-300 rounded px-3 py-2 text-sm focus:border-primary-500 outline-none font-mono"
         />
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-1">{t('settings:ai.chatModel')}</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings:ai.chatModel')}</label>
         <input
           type="text"
           value={config.model}
           onChange={(e) => setConfig({ ...config, model: e.target.value })}
           placeholder={t('settings:openRouter.chatModelPlaceholder')}
-          className="w-full bg-[#333] text-gray-200 border border-gray-600 rounded px-3 py-2 text-sm focus:border-primary-500 outline-none font-mono"
+          className="w-full bg-white text-gray-800 border border-gray-300 rounded px-3 py-2 text-sm focus:border-primary-500 outline-none font-mono"
         />
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-1">{t('settings:ai.embeddingModel')}</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings:ai.embeddingModel')}</label>
         <Select
           value={config.embeddingModel}
           options={embeddingOptions}
@@ -100,18 +100,18 @@ export function OpenRouterPanel({
           <p className="text-xs text-gray-500 mt-1">{t('settings:openRouter.embeddingNeedsKey')}</p>
         )}
         {embeddingNeedsCheck && (
-          <p className="text-xs text-amber-400 mt-1">{t('settings:openRouter.embeddingNeedsCheck')}</p>
+          <p className="text-xs text-amber-600 mt-1">{t('settings:openRouter.embeddingNeedsCheck')}</p>
         )}
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-1">{t('settings:ai.monthlyBudget')}</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings:ai.monthlyBudget')}</label>
         <input
           type="number"
           min={0}
           step={0.5}
           value={config.monthlyBudgetUsd}
           onChange={(e) => setConfig({ ...config, monthlyBudgetUsd: parseFloat(e.target.value) || 0 })}
-          className="w-full bg-[#333] text-gray-200 border border-gray-600 rounded px-3 py-2 text-sm focus:border-primary-500 outline-none"
+          className="w-full bg-white text-gray-800 border border-gray-300 rounded px-3 py-2 text-sm focus:border-primary-500 outline-none"
         />
         <p className="text-xs text-gray-500 mt-1">{t('settings:ai.monthlyBudgetHelp')}</p>
       </div>
@@ -119,7 +119,7 @@ export function OpenRouterPanel({
           finding out what you spent are the same screen. */}
       <UsageSummary />
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-1">{t('settings:openRouter.contextBudget')}</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings:openRouter.contextBudget')}</label>
         <p className="text-xs text-gray-500 mb-2">{t('settings:openRouter.contextBudgetHelp')}</p>
         <input
           type="number"
@@ -131,13 +131,13 @@ export function OpenRouterPanel({
             const v = parseInt(e.target.value, 10);
             if (Number.isFinite(v)) onContextBudgetChange(v);
           }}
-          className="w-32 bg-[#333] text-gray-200 border border-gray-600 rounded px-3 py-2 text-sm focus:border-primary-500 outline-none"
+          className="w-32 bg-white text-gray-800 border border-gray-300 rounded px-3 py-2 text-sm focus:border-primary-500 outline-none"
         />
       </div>
       <p className="text-xs text-gray-500">{t('settings:openRouter.noTrainingNotice')}</p>
       <div className="flex items-center justify-between">
         <div>
-          <label className="block text-sm font-medium text-gray-300">
+          <label className="block text-sm font-medium text-gray-700">
             {t('settings:openRouter.zeroDataRetention')}
           </label>
           <p className="text-xs text-gray-500 mt-0.5">{t('settings:openRouter.zeroDataRetentionHelp')}</p>
@@ -148,7 +148,7 @@ export function OpenRouterPanel({
           aria-pressed={config.zeroDataRetention}
           onClick={() => setConfig({ ...config, zeroDataRetention: !config.zeroDataRetention })}
           className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-            config.zeroDataRetention ? 'bg-primary-600' : 'bg-gray-600'
+            config.zeroDataRetention ? 'bg-primary-600' : 'bg-gray-300'
           }`}
         >
           <span

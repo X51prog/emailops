@@ -594,7 +594,6 @@ export function ReplyCompose({
             options={accounts.filter((a) => a.enabled).map((a) => ({ value: a.id, label: a.email }))}
             ariaLabel={t('compose:from')}
             fullWidth
-            variant="light"
           />
         </div>
       </div>

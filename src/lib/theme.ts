@@ -4,9 +4,9 @@
 // The whole dark theme hangs on one class: `html.dark`. `src/index.css` remaps
 // the gray palette and the light accent tints under it, so the hundreds of
 // `bg-white` / `text-gray-*` utilities in the components turn dark without a
-// `dark:` twin each (see the "Dark theme" section there). Surfaces that are
-// dark by design in both themes (sidebar, settings, modals) opt out with the
-// `theme-pinned` class.
+// `dark:` twin each (see the "Dark theme" section there). Every screen is
+// written in that light idiom, so all of them share the inbox's surfaces; the
+// sidebar and the dialogs (`theme-chrome`) get the dark palette on either theme.
 
 export const THEME_PREFERENCES = ['light', 'dark', 'system'] as const;
 export type ThemePreference = (typeof THEME_PREFERENCES)[number];

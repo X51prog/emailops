@@ -3,7 +3,7 @@
 
 /* The dark theme is a class on <html> (`src/lib/theme.ts`), never the OS media
  * query alone: "System" resolves it in JS so the choice in Settings wins. */
-@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant dark (&:where(.dark, .dark *, .theme-chrome, .theme-chrome *));
 
 /* Brand palette (sky). In `@theme` rather than tailwind.config.js so every
  * `bg-primary-*` utility compiles to `var(--color-primary-*)`; a JS `colors`
@@ -156,12 +156,12 @@ body {
 .eo-doc td,
 .eo-doc th {
   outline: none;
-  border: 1px solid #4b5563;
+  border: 1px solid var(--color-gray-300);
   padding: 0.25rem 0.5rem;
   vertical-align: top;
 }
 .eo-doc th {
-  background-color: #374151;
+  background-color: var(--color-gray-100);
 }
 .eo-doc img {
   max-width: 100%;
@@ -181,11 +181,13 @@ body {
 
 /* ───────────────────────────── Dark theme ─────────────────────────────
  *
- * How it works. The app has two kinds of surface: a chrome that is dark by
- * design in both themes (sidebar, settings, modals, Lenses, EO Docs,
- * onboarding — all built on `bg-gray-800`/`bg-[#1e1e1e]` + `text-gray-100`),
- * and the content area that was light-only (inbox, reading pane, chat,
- * calendar, composer… built on `bg-white` + `text-gray-900`/`text-gray-500`).
+ * How it works. Every screen — inbox, reading pane, chat, calendar, sidebar,
+ * settings, modals, Lenses, EO Docs, onboarding… — is written in one light
+ * idiom (`bg-white` + `text-gray-900`/`text-gray-500` + `border-gray-200`), so
+ * all of them share the same surface: white on light, navy on dark. The
+ * sidebar and the dialogs carry `theme-chrome`, which applies the dark palette
+ * inside them on the light theme too: they stay dark there, as they always
+ * were, and match everything else on the dark theme.
  *
  * Tailwind v4 compiles every `bg-gray-100` to `var(--color-gray-100)`, so the
  * dark theme does not need a `dark:` twin on each of the ~4,500 colour
@@ -195,19 +197,16 @@ body {
  * A `bg-white text-gray-900 border-gray-200` card therefore renders dark with
  * light text and a subtle border, with the same relative contrast as in light.
  *
- * The dark-by-design chrome opts out with `theme-pinned` on its root: inside it
- * the gray scale is the original again, so `bg-gray-900 text-gray-100` stays
- * what it is. Pin a subtree when it is dark in the light theme; never pin a
- * light surface to "fix" it — give it the right classes instead.
- *
  * What is deliberately untouched: `text-white` (button labels on coloured
  * backgrounds), the 300–600 accent steps (buttons, icons, badges on coloured
- * backgrounds), `black` overlays, and the `neutral` scale (dark-only screens).
+ * backgrounds), and `black` overlays.
  * Email bodies render in their own iframe; `src/lib/emailScheme.ts` decides
  * how they follow the dark theme (own dark styles, adapted, or left dark).
  *
  * `src/lib/darkPalette.test.ts` checks that every pale accent class used in
- * the components has an override here and that the gray remap is complete. */
+ * the components has an override here, that the gray remap is complete, and
+ * that no component uses a colour the remap cannot reach (a hex literal or the
+ * `neutral`/`zinc`/`slate`/`stone` scales). */
 
 /* Before `main.tsx` has read the `ui_theme` preference the page is blank; let
  * that blank frame follow the OS so a dark-OS user never sees a white flash. */
@@ -219,9 +218,14 @@ body {
 }
 
 .dark {
-  color-scheme: dark;
   color: oklch(90% 0.008 262);
   background-color: oklch(16.5% 0.03 262);
+}
+
+/* The palette: the dark theme everywhere, and the chrome on either theme. */
+.dark,
+.theme-chrome {
+  color-scheme: dark;
 
   /* What `bg-white` turns into: cards, panes, rows. Lighter than the page. */
   --eo-surface: oklch(21% 0.034 265);
@@ -242,20 +246,11 @@ body {
   --color-gray-950: oklch(98.5% 0.002 247);
 }
 
-/* Dark-by-design chrome: the original Tailwind gray scale again. */
-.dark :where(.theme-pinned) {
-  --eo-surface: #fff;
-  --color-gray-50: oklch(98.5% 0.002 247.839);
-  --color-gray-100: oklch(96.7% 0.003 264.542);
-  --color-gray-200: oklch(92.8% 0.006 264.531);
-  --color-gray-300: oklch(87.2% 0.01 258.338);
-  --color-gray-400: oklch(70.7% 0.022 261.325);
-  --color-gray-500: oklch(55.1% 0.027 264.364);
-  --color-gray-600: oklch(44.6% 0.03 256.802);
-  --color-gray-700: oklch(37.3% 0.034 259.733);
-  --color-gray-800: oklch(27.8% 0.033 256.848);
-  --color-gray-900: oklch(21% 0.034 264.665);
-  --color-gray-950: oklch(13% 0.028 261.692);
+/* The chrome's default text on the light theme, below any text utility. */
+@layer base {
+  .theme-chrome {
+    color: oklch(90% 0.008 262);
+  }
 }
 
 /* Utilities that need a value, not a variable: `bg-white` (whose variable
@@ -265,51 +260,55 @@ body {
  * specificity as the utility it replaces — a later `hover:bg-gray-50` still
  * wins on hover, exactly as it does in the light theme. */
 @layer utilities {
-  .dark :where(.bg-white) {
+  :is(.dark, .theme-chrome) :where(.bg-white) {
     background-color: var(--eo-surface);
   }
-  .dark :where(.hover\:bg-white):hover {
+  /* A chrome root is not inside itself; its own panel colour needs this. */
+  .theme-chrome:where(.bg-white) {
     background-color: var(--eo-surface);
   }
-  .dark :where(.focus-within\:bg-white):focus-within {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-white):hover {
     background-color: var(--eo-surface);
   }
-  .dark :where(.bg-white\/60) {
+  :is(.dark, .theme-chrome) :where(.focus-within\:bg-white):focus-within {
+    background-color: var(--eo-surface);
+  }
+  :is(.dark, .theme-chrome) :where(.bg-white\/60) {
     background-color: color-mix(in oklab, var(--eo-surface) 60%, transparent);
   }
-  .dark :where(.bg-white\/90) {
+  :is(.dark, .theme-chrome) :where(.bg-white\/90) {
     background-color: color-mix(in oklab, var(--eo-surface) 90%, transparent);
   }
-  .dark :where(.from-white) {
+  :is(.dark, .theme-chrome) :where(.from-white) {
     --tw-gradient-from: var(--eo-surface);
   }
-  .dark :where(.via-white) {
+  :is(.dark, .theme-chrome) :where(.via-white) {
     --tw-gradient-via: var(--eo-surface);
   }
-  .dark :where(.to-white) {
+  :is(.dark, .theme-chrome) :where(.to-white) {
     --tw-gradient-to: var(--eo-surface);
   }
 
   /* primary */
-  .dark :where(.bg-primary-50) {
+  :is(.dark, .theme-chrome) :where(.bg-primary-50) {
     background-color: oklch(27% 0.06 230);
   }
-  .dark :where(.hover\:bg-primary-50):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-primary-50):hover {
     background-color: oklch(27% 0.06 230);
   }
-  .dark :where(.bg-primary-100) {
+  :is(.dark, .theme-chrome) :where(.bg-primary-100) {
     background-color: oklch(31% 0.08 230);
   }
-  .dark :where(.hover\:bg-primary-100):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-primary-100):hover {
     background-color: oklch(31% 0.08 230);
   }
-  .dark :where(.bg-primary-200) {
+  :is(.dark, .theme-chrome) :where(.bg-primary-200) {
     background-color: oklch(36% 0.1 230);
   }
-  .dark :where(.hover\:bg-primary-200):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-primary-200):hover {
     background-color: oklch(36% 0.1 230);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-primary-50\/10,
       .bg-primary-50\/20,
@@ -323,7 +322,7 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(27% 0.06 230) 70%, transparent);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-primary-100\/10,
       .bg-primary-100\/20,
@@ -337,56 +336,56 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(31% 0.08 230) 70%, transparent);
   }
-  .dark :where(.border-primary-100) {
+  :is(.dark, .theme-chrome) :where(.border-primary-100) {
     border-color: oklch(34% 0.09 230);
   }
-  .dark :where(.border-primary-200) {
+  :is(.dark, .theme-chrome) :where(.border-primary-200) {
     border-color: oklch(40% 0.1 230);
   }
-  .dark :where(.border-primary-300) {
+  :is(.dark, .theme-chrome) :where(.border-primary-300) {
     border-color: oklch(46% 0.12 230);
   }
-  .dark :where(.text-primary-600) {
+  :is(.dark, .theme-chrome) :where(.text-primary-600) {
     color: oklch(75% 0.14 230);
   }
-  .dark :where(.hover\:text-primary-600):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-primary-600):hover {
     color: oklch(75% 0.14 230);
   }
-  .dark :where(.text-primary-700, .text-primary-800, .text-primary-900) {
+  :is(.dark, .theme-chrome) :where(.text-primary-700, .text-primary-800, .text-primary-900) {
     color: oklch(84% 0.1 230);
   }
-  .dark :where(.hover\:text-primary-700, .hover\:text-primary-800, .hover\:text-primary-900):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-primary-700, .hover\:text-primary-800, .hover\:text-primary-900):hover {
     color: oklch(84% 0.1 230);
   }
-  .dark :where(.ring-primary-100) {
+  :is(.dark, .theme-chrome) :where(.ring-primary-100) {
     --tw-ring-color: oklch(40% 0.1 230);
   }
-  .dark :where(.focus\:ring-primary-100):focus {
+  :is(.dark, .theme-chrome) :where(.focus\:ring-primary-100):focus {
     --tw-ring-color: oklch(40% 0.1 230);
   }
-  .dark :where(.focus-within\:ring-primary-100):focus-within {
+  :is(.dark, .theme-chrome) :where(.focus-within\:ring-primary-100):focus-within {
     --tw-ring-color: oklch(40% 0.1 230);
   }
   /* red */
-  .dark :where(.bg-red-50) {
+  :is(.dark, .theme-chrome) :where(.bg-red-50) {
     background-color: oklch(27% 0.06 25);
   }
-  .dark :where(.hover\:bg-red-50):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-red-50):hover {
     background-color: oklch(27% 0.06 25);
   }
-  .dark :where(.bg-red-100) {
+  :is(.dark, .theme-chrome) :where(.bg-red-100) {
     background-color: oklch(31% 0.08 25);
   }
-  .dark :where(.hover\:bg-red-100):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-red-100):hover {
     background-color: oklch(31% 0.08 25);
   }
-  .dark :where(.bg-red-200) {
+  :is(.dark, .theme-chrome) :where(.bg-red-200) {
     background-color: oklch(36% 0.1 25);
   }
-  .dark :where(.hover\:bg-red-200):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-red-200):hover {
     background-color: oklch(36% 0.1 25);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-red-50\/10,
       .bg-red-50\/20,
@@ -400,7 +399,7 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(27% 0.06 25) 70%, transparent);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-red-100\/10,
       .bg-red-100\/20,
@@ -414,56 +413,56 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(31% 0.08 25) 70%, transparent);
   }
-  .dark :where(.border-red-100) {
+  :is(.dark, .theme-chrome) :where(.border-red-100) {
     border-color: oklch(34% 0.09 25);
   }
-  .dark :where(.border-red-200) {
+  :is(.dark, .theme-chrome) :where(.border-red-200) {
     border-color: oklch(40% 0.1 25);
   }
-  .dark :where(.border-red-300) {
+  :is(.dark, .theme-chrome) :where(.border-red-300) {
     border-color: oklch(46% 0.12 25);
   }
-  .dark :where(.text-red-600) {
+  :is(.dark, .theme-chrome) :where(.text-red-600) {
     color: oklch(75% 0.14 25);
   }
-  .dark :where(.hover\:text-red-600):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-red-600):hover {
     color: oklch(75% 0.14 25);
   }
-  .dark :where(.text-red-700, .text-red-800, .text-red-900) {
+  :is(.dark, .theme-chrome) :where(.text-red-700, .text-red-800, .text-red-900) {
     color: oklch(84% 0.1 25);
   }
-  .dark :where(.hover\:text-red-700, .hover\:text-red-800, .hover\:text-red-900):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-red-700, .hover\:text-red-800, .hover\:text-red-900):hover {
     color: oklch(84% 0.1 25);
   }
-  .dark :where(.ring-red-100) {
+  :is(.dark, .theme-chrome) :where(.ring-red-100) {
     --tw-ring-color: oklch(40% 0.1 25);
   }
-  .dark :where(.focus\:ring-red-100):focus {
+  :is(.dark, .theme-chrome) :where(.focus\:ring-red-100):focus {
     --tw-ring-color: oklch(40% 0.1 25);
   }
-  .dark :where(.focus-within\:ring-red-100):focus-within {
+  :is(.dark, .theme-chrome) :where(.focus-within\:ring-red-100):focus-within {
     --tw-ring-color: oklch(40% 0.1 25);
   }
   /* orange */
-  .dark :where(.bg-orange-50) {
+  :is(.dark, .theme-chrome) :where(.bg-orange-50) {
     background-color: oklch(27% 0.06 55);
   }
-  .dark :where(.hover\:bg-orange-50):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-orange-50):hover {
     background-color: oklch(27% 0.06 55);
   }
-  .dark :where(.bg-orange-100) {
+  :is(.dark, .theme-chrome) :where(.bg-orange-100) {
     background-color: oklch(31% 0.08 55);
   }
-  .dark :where(.hover\:bg-orange-100):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-orange-100):hover {
     background-color: oklch(31% 0.08 55);
   }
-  .dark :where(.bg-orange-200) {
+  :is(.dark, .theme-chrome) :where(.bg-orange-200) {
     background-color: oklch(36% 0.1 55);
   }
-  .dark :where(.hover\:bg-orange-200):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-orange-200):hover {
     background-color: oklch(36% 0.1 55);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-orange-50\/10,
       .bg-orange-50\/20,
@@ -477,7 +476,7 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(27% 0.06 55) 70%, transparent);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-orange-100\/10,
       .bg-orange-100\/20,
@@ -491,56 +490,56 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(31% 0.08 55) 70%, transparent);
   }
-  .dark :where(.border-orange-100) {
+  :is(.dark, .theme-chrome) :where(.border-orange-100) {
     border-color: oklch(34% 0.09 55);
   }
-  .dark :where(.border-orange-200) {
+  :is(.dark, .theme-chrome) :where(.border-orange-200) {
     border-color: oklch(40% 0.1 55);
   }
-  .dark :where(.border-orange-300) {
+  :is(.dark, .theme-chrome) :where(.border-orange-300) {
     border-color: oklch(46% 0.12 55);
   }
-  .dark :where(.text-orange-600) {
+  :is(.dark, .theme-chrome) :where(.text-orange-600) {
     color: oklch(75% 0.14 55);
   }
-  .dark :where(.hover\:text-orange-600):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-orange-600):hover {
     color: oklch(75% 0.14 55);
   }
-  .dark :where(.text-orange-700, .text-orange-800, .text-orange-900) {
+  :is(.dark, .theme-chrome) :where(.text-orange-700, .text-orange-800, .text-orange-900) {
     color: oklch(84% 0.1 55);
   }
-  .dark :where(.hover\:text-orange-700, .hover\:text-orange-800, .hover\:text-orange-900):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-orange-700, .hover\:text-orange-800, .hover\:text-orange-900):hover {
     color: oklch(84% 0.1 55);
   }
-  .dark :where(.ring-orange-100) {
+  :is(.dark, .theme-chrome) :where(.ring-orange-100) {
     --tw-ring-color: oklch(40% 0.1 55);
   }
-  .dark :where(.focus\:ring-orange-100):focus {
+  :is(.dark, .theme-chrome) :where(.focus\:ring-orange-100):focus {
     --tw-ring-color: oklch(40% 0.1 55);
   }
-  .dark :where(.focus-within\:ring-orange-100):focus-within {
+  :is(.dark, .theme-chrome) :where(.focus-within\:ring-orange-100):focus-within {
     --tw-ring-color: oklch(40% 0.1 55);
   }
   /* amber */
-  .dark :where(.bg-amber-50) {
+  :is(.dark, .theme-chrome) :where(.bg-amber-50) {
     background-color: oklch(27% 0.06 75);
   }
-  .dark :where(.hover\:bg-amber-50):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-amber-50):hover {
     background-color: oklch(27% 0.06 75);
   }
-  .dark :where(.bg-amber-100) {
+  :is(.dark, .theme-chrome) :where(.bg-amber-100) {
     background-color: oklch(31% 0.08 75);
   }
-  .dark :where(.hover\:bg-amber-100):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-amber-100):hover {
     background-color: oklch(31% 0.08 75);
   }
-  .dark :where(.bg-amber-200) {
+  :is(.dark, .theme-chrome) :where(.bg-amber-200) {
     background-color: oklch(36% 0.1 75);
   }
-  .dark :where(.hover\:bg-amber-200):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-amber-200):hover {
     background-color: oklch(36% 0.1 75);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-amber-50\/10,
       .bg-amber-50\/20,
@@ -554,7 +553,7 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(27% 0.06 75) 70%, transparent);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-amber-100\/10,
       .bg-amber-100\/20,
@@ -568,56 +567,56 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(31% 0.08 75) 70%, transparent);
   }
-  .dark :where(.border-amber-100) {
+  :is(.dark, .theme-chrome) :where(.border-amber-100) {
     border-color: oklch(34% 0.09 75);
   }
-  .dark :where(.border-amber-200) {
+  :is(.dark, .theme-chrome) :where(.border-amber-200) {
     border-color: oklch(40% 0.1 75);
   }
-  .dark :where(.border-amber-300) {
+  :is(.dark, .theme-chrome) :where(.border-amber-300) {
     border-color: oklch(46% 0.12 75);
   }
-  .dark :where(.text-amber-600) {
+  :is(.dark, .theme-chrome) :where(.text-amber-600) {
     color: oklch(75% 0.14 75);
   }
-  .dark :where(.hover\:text-amber-600):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-amber-600):hover {
     color: oklch(75% 0.14 75);
   }
-  .dark :where(.text-amber-700, .text-amber-800, .text-amber-900) {
+  :is(.dark, .theme-chrome) :where(.text-amber-700, .text-amber-800, .text-amber-900) {
     color: oklch(84% 0.1 75);
   }
-  .dark :where(.hover\:text-amber-700, .hover\:text-amber-800, .hover\:text-amber-900):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-amber-700, .hover\:text-amber-800, .hover\:text-amber-900):hover {
     color: oklch(84% 0.1 75);
   }
-  .dark :where(.ring-amber-100) {
+  :is(.dark, .theme-chrome) :where(.ring-amber-100) {
     --tw-ring-color: oklch(40% 0.1 75);
   }
-  .dark :where(.focus\:ring-amber-100):focus {
+  :is(.dark, .theme-chrome) :where(.focus\:ring-amber-100):focus {
     --tw-ring-color: oklch(40% 0.1 75);
   }
-  .dark :where(.focus-within\:ring-amber-100):focus-within {
+  :is(.dark, .theme-chrome) :where(.focus-within\:ring-amber-100):focus-within {
     --tw-ring-color: oklch(40% 0.1 75);
   }
   /* yellow */
-  .dark :where(.bg-yellow-50) {
+  :is(.dark, .theme-chrome) :where(.bg-yellow-50) {
     background-color: oklch(27% 0.06 95);
   }
-  .dark :where(.hover\:bg-yellow-50):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-yellow-50):hover {
     background-color: oklch(27% 0.06 95);
   }
-  .dark :where(.bg-yellow-100) {
+  :is(.dark, .theme-chrome) :where(.bg-yellow-100) {
     background-color: oklch(31% 0.08 95);
   }
-  .dark :where(.hover\:bg-yellow-100):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-yellow-100):hover {
     background-color: oklch(31% 0.08 95);
   }
-  .dark :where(.bg-yellow-200) {
+  :is(.dark, .theme-chrome) :where(.bg-yellow-200) {
     background-color: oklch(36% 0.1 95);
   }
-  .dark :where(.hover\:bg-yellow-200):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-yellow-200):hover {
     background-color: oklch(36% 0.1 95);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-yellow-50\/10,
       .bg-yellow-50\/20,
@@ -631,7 +630,7 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(27% 0.06 95) 70%, transparent);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-yellow-100\/10,
       .bg-yellow-100\/20,
@@ -645,56 +644,56 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(31% 0.08 95) 70%, transparent);
   }
-  .dark :where(.border-yellow-100) {
+  :is(.dark, .theme-chrome) :where(.border-yellow-100) {
     border-color: oklch(34% 0.09 95);
   }
-  .dark :where(.border-yellow-200) {
+  :is(.dark, .theme-chrome) :where(.border-yellow-200) {
     border-color: oklch(40% 0.1 95);
   }
-  .dark :where(.border-yellow-300) {
+  :is(.dark, .theme-chrome) :where(.border-yellow-300) {
     border-color: oklch(46% 0.12 95);
   }
-  .dark :where(.text-yellow-600) {
+  :is(.dark, .theme-chrome) :where(.text-yellow-600) {
     color: oklch(75% 0.14 95);
   }
-  .dark :where(.hover\:text-yellow-600):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-yellow-600):hover {
     color: oklch(75% 0.14 95);
   }
-  .dark :where(.text-yellow-700, .text-yellow-800, .text-yellow-900) {
+  :is(.dark, .theme-chrome) :where(.text-yellow-700, .text-yellow-800, .text-yellow-900) {
     color: oklch(84% 0.1 95);
   }
-  .dark :where(.hover\:text-yellow-700, .hover\:text-yellow-800, .hover\:text-yellow-900):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-yellow-700, .hover\:text-yellow-800, .hover\:text-yellow-900):hover {
     color: oklch(84% 0.1 95);
   }
-  .dark :where(.ring-yellow-100) {
+  :is(.dark, .theme-chrome) :where(.ring-yellow-100) {
     --tw-ring-color: oklch(40% 0.1 95);
   }
-  .dark :where(.focus\:ring-yellow-100):focus {
+  :is(.dark, .theme-chrome) :where(.focus\:ring-yellow-100):focus {
     --tw-ring-color: oklch(40% 0.1 95);
   }
-  .dark :where(.focus-within\:ring-yellow-100):focus-within {
+  :is(.dark, .theme-chrome) :where(.focus-within\:ring-yellow-100):focus-within {
     --tw-ring-color: oklch(40% 0.1 95);
   }
   /* lime */
-  .dark :where(.bg-lime-50) {
+  :is(.dark, .theme-chrome) :where(.bg-lime-50) {
     background-color: oklch(27% 0.06 125);
   }
-  .dark :where(.hover\:bg-lime-50):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-lime-50):hover {
     background-color: oklch(27% 0.06 125);
   }
-  .dark :where(.bg-lime-100) {
+  :is(.dark, .theme-chrome) :where(.bg-lime-100) {
     background-color: oklch(31% 0.08 125);
   }
-  .dark :where(.hover\:bg-lime-100):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-lime-100):hover {
     background-color: oklch(31% 0.08 125);
   }
-  .dark :where(.bg-lime-200) {
+  :is(.dark, .theme-chrome) :where(.bg-lime-200) {
     background-color: oklch(36% 0.1 125);
   }
-  .dark :where(.hover\:bg-lime-200):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-lime-200):hover {
     background-color: oklch(36% 0.1 125);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-lime-50\/10,
       .bg-lime-50\/20,
@@ -708,7 +707,7 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(27% 0.06 125) 70%, transparent);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-lime-100\/10,
       .bg-lime-100\/20,
@@ -722,56 +721,56 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(31% 0.08 125) 70%, transparent);
   }
-  .dark :where(.border-lime-100) {
+  :is(.dark, .theme-chrome) :where(.border-lime-100) {
     border-color: oklch(34% 0.09 125);
   }
-  .dark :where(.border-lime-200) {
+  :is(.dark, .theme-chrome) :where(.border-lime-200) {
     border-color: oklch(40% 0.1 125);
   }
-  .dark :where(.border-lime-300) {
+  :is(.dark, .theme-chrome) :where(.border-lime-300) {
     border-color: oklch(46% 0.12 125);
   }
-  .dark :where(.text-lime-600) {
+  :is(.dark, .theme-chrome) :where(.text-lime-600) {
     color: oklch(75% 0.14 125);
   }
-  .dark :where(.hover\:text-lime-600):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-lime-600):hover {
     color: oklch(75% 0.14 125);
   }
-  .dark :where(.text-lime-700, .text-lime-800, .text-lime-900) {
+  :is(.dark, .theme-chrome) :where(.text-lime-700, .text-lime-800, .text-lime-900) {
     color: oklch(84% 0.1 125);
   }
-  .dark :where(.hover\:text-lime-700, .hover\:text-lime-800, .hover\:text-lime-900):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-lime-700, .hover\:text-lime-800, .hover\:text-lime-900):hover {
     color: oklch(84% 0.1 125);
   }
-  .dark :where(.ring-lime-100) {
+  :is(.dark, .theme-chrome) :where(.ring-lime-100) {
     --tw-ring-color: oklch(40% 0.1 125);
   }
-  .dark :where(.focus\:ring-lime-100):focus {
+  :is(.dark, .theme-chrome) :where(.focus\:ring-lime-100):focus {
     --tw-ring-color: oklch(40% 0.1 125);
   }
-  .dark :where(.focus-within\:ring-lime-100):focus-within {
+  :is(.dark, .theme-chrome) :where(.focus-within\:ring-lime-100):focus-within {
     --tw-ring-color: oklch(40% 0.1 125);
   }
   /* green */
-  .dark :where(.bg-green-50) {
+  :is(.dark, .theme-chrome) :where(.bg-green-50) {
     background-color: oklch(27% 0.06 150);
   }
-  .dark :where(.hover\:bg-green-50):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-green-50):hover {
     background-color: oklch(27% 0.06 150);
   }
-  .dark :where(.bg-green-100) {
+  :is(.dark, .theme-chrome) :where(.bg-green-100) {
     background-color: oklch(31% 0.08 150);
   }
-  .dark :where(.hover\:bg-green-100):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-green-100):hover {
     background-color: oklch(31% 0.08 150);
   }
-  .dark :where(.bg-green-200) {
+  :is(.dark, .theme-chrome) :where(.bg-green-200) {
     background-color: oklch(36% 0.1 150);
   }
-  .dark :where(.hover\:bg-green-200):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-green-200):hover {
     background-color: oklch(36% 0.1 150);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-green-50\/10,
       .bg-green-50\/20,
@@ -785,7 +784,7 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(27% 0.06 150) 70%, transparent);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-green-100\/10,
       .bg-green-100\/20,
@@ -799,56 +798,56 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(31% 0.08 150) 70%, transparent);
   }
-  .dark :where(.border-green-100) {
+  :is(.dark, .theme-chrome) :where(.border-green-100) {
     border-color: oklch(34% 0.09 150);
   }
-  .dark :where(.border-green-200) {
+  :is(.dark, .theme-chrome) :where(.border-green-200) {
     border-color: oklch(40% 0.1 150);
   }
-  .dark :where(.border-green-300) {
+  :is(.dark, .theme-chrome) :where(.border-green-300) {
     border-color: oklch(46% 0.12 150);
   }
-  .dark :where(.text-green-600) {
+  :is(.dark, .theme-chrome) :where(.text-green-600) {
     color: oklch(75% 0.14 150);
   }
-  .dark :where(.hover\:text-green-600):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-green-600):hover {
     color: oklch(75% 0.14 150);
   }
-  .dark :where(.text-green-700, .text-green-800, .text-green-900) {
+  :is(.dark, .theme-chrome) :where(.text-green-700, .text-green-800, .text-green-900) {
     color: oklch(84% 0.1 150);
   }
-  .dark :where(.hover\:text-green-700, .hover\:text-green-800, .hover\:text-green-900):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-green-700, .hover\:text-green-800, .hover\:text-green-900):hover {
     color: oklch(84% 0.1 150);
   }
-  .dark :where(.ring-green-100) {
+  :is(.dark, .theme-chrome) :where(.ring-green-100) {
     --tw-ring-color: oklch(40% 0.1 150);
   }
-  .dark :where(.focus\:ring-green-100):focus {
+  :is(.dark, .theme-chrome) :where(.focus\:ring-green-100):focus {
     --tw-ring-color: oklch(40% 0.1 150);
   }
-  .dark :where(.focus-within\:ring-green-100):focus-within {
+  :is(.dark, .theme-chrome) :where(.focus-within\:ring-green-100):focus-within {
     --tw-ring-color: oklch(40% 0.1 150);
   }
   /* emerald */
-  .dark :where(.bg-emerald-50) {
+  :is(.dark, .theme-chrome) :where(.bg-emerald-50) {
     background-color: oklch(27% 0.06 165);
   }
-  .dark :where(.hover\:bg-emerald-50):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-emerald-50):hover {
     background-color: oklch(27% 0.06 165);
   }
-  .dark :where(.bg-emerald-100) {
+  :is(.dark, .theme-chrome) :where(.bg-emerald-100) {
     background-color: oklch(31% 0.08 165);
   }
-  .dark :where(.hover\:bg-emerald-100):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-emerald-100):hover {
     background-color: oklch(31% 0.08 165);
   }
-  .dark :where(.bg-emerald-200) {
+  :is(.dark, .theme-chrome) :where(.bg-emerald-200) {
     background-color: oklch(36% 0.1 165);
   }
-  .dark :where(.hover\:bg-emerald-200):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-emerald-200):hover {
     background-color: oklch(36% 0.1 165);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-emerald-50\/10,
       .bg-emerald-50\/20,
@@ -862,7 +861,7 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(27% 0.06 165) 70%, transparent);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-emerald-100\/10,
       .bg-emerald-100\/20,
@@ -876,56 +875,56 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(31% 0.08 165) 70%, transparent);
   }
-  .dark :where(.border-emerald-100) {
+  :is(.dark, .theme-chrome) :where(.border-emerald-100) {
     border-color: oklch(34% 0.09 165);
   }
-  .dark :where(.border-emerald-200) {
+  :is(.dark, .theme-chrome) :where(.border-emerald-200) {
     border-color: oklch(40% 0.1 165);
   }
-  .dark :where(.border-emerald-300) {
+  :is(.dark, .theme-chrome) :where(.border-emerald-300) {
     border-color: oklch(46% 0.12 165);
   }
-  .dark :where(.text-emerald-600) {
+  :is(.dark, .theme-chrome) :where(.text-emerald-600) {
     color: oklch(75% 0.14 165);
   }
-  .dark :where(.hover\:text-emerald-600):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-emerald-600):hover {
     color: oklch(75% 0.14 165);
   }
-  .dark :where(.text-emerald-700, .text-emerald-800, .text-emerald-900) {
+  :is(.dark, .theme-chrome) :where(.text-emerald-700, .text-emerald-800, .text-emerald-900) {
     color: oklch(84% 0.1 165);
   }
-  .dark :where(.hover\:text-emerald-700, .hover\:text-emerald-800, .hover\:text-emerald-900):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-emerald-700, .hover\:text-emerald-800, .hover\:text-emerald-900):hover {
     color: oklch(84% 0.1 165);
   }
-  .dark :where(.ring-emerald-100) {
+  :is(.dark, .theme-chrome) :where(.ring-emerald-100) {
     --tw-ring-color: oklch(40% 0.1 165);
   }
-  .dark :where(.focus\:ring-emerald-100):focus {
+  :is(.dark, .theme-chrome) :where(.focus\:ring-emerald-100):focus {
     --tw-ring-color: oklch(40% 0.1 165);
   }
-  .dark :where(.focus-within\:ring-emerald-100):focus-within {
+  :is(.dark, .theme-chrome) :where(.focus-within\:ring-emerald-100):focus-within {
     --tw-ring-color: oklch(40% 0.1 165);
   }
   /* teal */
-  .dark :where(.bg-teal-50) {
+  :is(.dark, .theme-chrome) :where(.bg-teal-50) {
     background-color: oklch(27% 0.06 180);
   }
-  .dark :where(.hover\:bg-teal-50):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-teal-50):hover {
     background-color: oklch(27% 0.06 180);
   }
-  .dark :where(.bg-teal-100) {
+  :is(.dark, .theme-chrome) :where(.bg-teal-100) {
     background-color: oklch(31% 0.08 180);
   }
-  .dark :where(.hover\:bg-teal-100):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-teal-100):hover {
     background-color: oklch(31% 0.08 180);
   }
-  .dark :where(.bg-teal-200) {
+  :is(.dark, .theme-chrome) :where(.bg-teal-200) {
     background-color: oklch(36% 0.1 180);
   }
-  .dark :where(.hover\:bg-teal-200):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-teal-200):hover {
     background-color: oklch(36% 0.1 180);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-teal-50\/10,
       .bg-teal-50\/20,
@@ -939,7 +938,7 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(27% 0.06 180) 70%, transparent);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-teal-100\/10,
       .bg-teal-100\/20,
@@ -953,56 +952,56 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(31% 0.08 180) 70%, transparent);
   }
-  .dark :where(.border-teal-100) {
+  :is(.dark, .theme-chrome) :where(.border-teal-100) {
     border-color: oklch(34% 0.09 180);
   }
-  .dark :where(.border-teal-200) {
+  :is(.dark, .theme-chrome) :where(.border-teal-200) {
     border-color: oklch(40% 0.1 180);
   }
-  .dark :where(.border-teal-300) {
+  :is(.dark, .theme-chrome) :where(.border-teal-300) {
     border-color: oklch(46% 0.12 180);
   }
-  .dark :where(.text-teal-600) {
+  :is(.dark, .theme-chrome) :where(.text-teal-600) {
     color: oklch(75% 0.14 180);
   }
-  .dark :where(.hover\:text-teal-600):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-teal-600):hover {
     color: oklch(75% 0.14 180);
   }
-  .dark :where(.text-teal-700, .text-teal-800, .text-teal-900) {
+  :is(.dark, .theme-chrome) :where(.text-teal-700, .text-teal-800, .text-teal-900) {
     color: oklch(84% 0.1 180);
   }
-  .dark :where(.hover\:text-teal-700, .hover\:text-teal-800, .hover\:text-teal-900):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-teal-700, .hover\:text-teal-800, .hover\:text-teal-900):hover {
     color: oklch(84% 0.1 180);
   }
-  .dark :where(.ring-teal-100) {
+  :is(.dark, .theme-chrome) :where(.ring-teal-100) {
     --tw-ring-color: oklch(40% 0.1 180);
   }
-  .dark :where(.focus\:ring-teal-100):focus {
+  :is(.dark, .theme-chrome) :where(.focus\:ring-teal-100):focus {
     --tw-ring-color: oklch(40% 0.1 180);
   }
-  .dark :where(.focus-within\:ring-teal-100):focus-within {
+  :is(.dark, .theme-chrome) :where(.focus-within\:ring-teal-100):focus-within {
     --tw-ring-color: oklch(40% 0.1 180);
   }
   /* cyan */
-  .dark :where(.bg-cyan-50) {
+  :is(.dark, .theme-chrome) :where(.bg-cyan-50) {
     background-color: oklch(27% 0.06 210);
   }
-  .dark :where(.hover\:bg-cyan-50):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-cyan-50):hover {
     background-color: oklch(27% 0.06 210);
   }
-  .dark :where(.bg-cyan-100) {
+  :is(.dark, .theme-chrome) :where(.bg-cyan-100) {
     background-color: oklch(31% 0.08 210);
   }
-  .dark :where(.hover\:bg-cyan-100):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-cyan-100):hover {
     background-color: oklch(31% 0.08 210);
   }
-  .dark :where(.bg-cyan-200) {
+  :is(.dark, .theme-chrome) :where(.bg-cyan-200) {
     background-color: oklch(36% 0.1 210);
   }
-  .dark :where(.hover\:bg-cyan-200):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-cyan-200):hover {
     background-color: oklch(36% 0.1 210);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-cyan-50\/10,
       .bg-cyan-50\/20,
@@ -1016,7 +1015,7 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(27% 0.06 210) 70%, transparent);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-cyan-100\/10,
       .bg-cyan-100\/20,
@@ -1030,56 +1029,56 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(31% 0.08 210) 70%, transparent);
   }
-  .dark :where(.border-cyan-100) {
+  :is(.dark, .theme-chrome) :where(.border-cyan-100) {
     border-color: oklch(34% 0.09 210);
   }
-  .dark :where(.border-cyan-200) {
+  :is(.dark, .theme-chrome) :where(.border-cyan-200) {
     border-color: oklch(40% 0.1 210);
   }
-  .dark :where(.border-cyan-300) {
+  :is(.dark, .theme-chrome) :where(.border-cyan-300) {
     border-color: oklch(46% 0.12 210);
   }
-  .dark :where(.text-cyan-600) {
+  :is(.dark, .theme-chrome) :where(.text-cyan-600) {
     color: oklch(75% 0.14 210);
   }
-  .dark :where(.hover\:text-cyan-600):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-cyan-600):hover {
     color: oklch(75% 0.14 210);
   }
-  .dark :where(.text-cyan-700, .text-cyan-800, .text-cyan-900) {
+  :is(.dark, .theme-chrome) :where(.text-cyan-700, .text-cyan-800, .text-cyan-900) {
     color: oklch(84% 0.1 210);
   }
-  .dark :where(.hover\:text-cyan-700, .hover\:text-cyan-800, .hover\:text-cyan-900):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-cyan-700, .hover\:text-cyan-800, .hover\:text-cyan-900):hover {
     color: oklch(84% 0.1 210);
   }
-  .dark :where(.ring-cyan-100) {
+  :is(.dark, .theme-chrome) :where(.ring-cyan-100) {
     --tw-ring-color: oklch(40% 0.1 210);
   }
-  .dark :where(.focus\:ring-cyan-100):focus {
+  :is(.dark, .theme-chrome) :where(.focus\:ring-cyan-100):focus {
     --tw-ring-color: oklch(40% 0.1 210);
   }
-  .dark :where(.focus-within\:ring-cyan-100):focus-within {
+  :is(.dark, .theme-chrome) :where(.focus-within\:ring-cyan-100):focus-within {
     --tw-ring-color: oklch(40% 0.1 210);
   }
   /* sky */
-  .dark :where(.bg-sky-50) {
+  :is(.dark, .theme-chrome) :where(.bg-sky-50) {
     background-color: oklch(27% 0.06 230);
   }
-  .dark :where(.hover\:bg-sky-50):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-sky-50):hover {
     background-color: oklch(27% 0.06 230);
   }
-  .dark :where(.bg-sky-100) {
+  :is(.dark, .theme-chrome) :where(.bg-sky-100) {
     background-color: oklch(31% 0.08 230);
   }
-  .dark :where(.hover\:bg-sky-100):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-sky-100):hover {
     background-color: oklch(31% 0.08 230);
   }
-  .dark :where(.bg-sky-200) {
+  :is(.dark, .theme-chrome) :where(.bg-sky-200) {
     background-color: oklch(36% 0.1 230);
   }
-  .dark :where(.hover\:bg-sky-200):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-sky-200):hover {
     background-color: oklch(36% 0.1 230);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-sky-50\/10,
       .bg-sky-50\/20,
@@ -1093,7 +1092,7 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(27% 0.06 230) 70%, transparent);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-sky-100\/10,
       .bg-sky-100\/20,
@@ -1107,56 +1106,56 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(31% 0.08 230) 70%, transparent);
   }
-  .dark :where(.border-sky-100) {
+  :is(.dark, .theme-chrome) :where(.border-sky-100) {
     border-color: oklch(34% 0.09 230);
   }
-  .dark :where(.border-sky-200) {
+  :is(.dark, .theme-chrome) :where(.border-sky-200) {
     border-color: oklch(40% 0.1 230);
   }
-  .dark :where(.border-sky-300) {
+  :is(.dark, .theme-chrome) :where(.border-sky-300) {
     border-color: oklch(46% 0.12 230);
   }
-  .dark :where(.text-sky-600) {
+  :is(.dark, .theme-chrome) :where(.text-sky-600) {
     color: oklch(75% 0.14 230);
   }
-  .dark :where(.hover\:text-sky-600):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-sky-600):hover {
     color: oklch(75% 0.14 230);
   }
-  .dark :where(.text-sky-700, .text-sky-800, .text-sky-900) {
+  :is(.dark, .theme-chrome) :where(.text-sky-700, .text-sky-800, .text-sky-900) {
     color: oklch(84% 0.1 230);
   }
-  .dark :where(.hover\:text-sky-700, .hover\:text-sky-800, .hover\:text-sky-900):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-sky-700, .hover\:text-sky-800, .hover\:text-sky-900):hover {
     color: oklch(84% 0.1 230);
   }
-  .dark :where(.ring-sky-100) {
+  :is(.dark, .theme-chrome) :where(.ring-sky-100) {
     --tw-ring-color: oklch(40% 0.1 230);
   }
-  .dark :where(.focus\:ring-sky-100):focus {
+  :is(.dark, .theme-chrome) :where(.focus\:ring-sky-100):focus {
     --tw-ring-color: oklch(40% 0.1 230);
   }
-  .dark :where(.focus-within\:ring-sky-100):focus-within {
+  :is(.dark, .theme-chrome) :where(.focus-within\:ring-sky-100):focus-within {
     --tw-ring-color: oklch(40% 0.1 230);
   }
   /* blue */
-  .dark :where(.bg-blue-50) {
+  :is(.dark, .theme-chrome) :where(.bg-blue-50) {
     background-color: oklch(27% 0.06 260);
   }
-  .dark :where(.hover\:bg-blue-50):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-blue-50):hover {
     background-color: oklch(27% 0.06 260);
   }
-  .dark :where(.bg-blue-100) {
+  :is(.dark, .theme-chrome) :where(.bg-blue-100) {
     background-color: oklch(31% 0.08 260);
   }
-  .dark :where(.hover\:bg-blue-100):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-blue-100):hover {
     background-color: oklch(31% 0.08 260);
   }
-  .dark :where(.bg-blue-200) {
+  :is(.dark, .theme-chrome) :where(.bg-blue-200) {
     background-color: oklch(36% 0.1 260);
   }
-  .dark :where(.hover\:bg-blue-200):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-blue-200):hover {
     background-color: oklch(36% 0.1 260);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-blue-50\/10,
       .bg-blue-50\/20,
@@ -1170,7 +1169,7 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(27% 0.06 260) 70%, transparent);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-blue-100\/10,
       .bg-blue-100\/20,
@@ -1184,56 +1183,56 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(31% 0.08 260) 70%, transparent);
   }
-  .dark :where(.border-blue-100) {
+  :is(.dark, .theme-chrome) :where(.border-blue-100) {
     border-color: oklch(34% 0.09 260);
   }
-  .dark :where(.border-blue-200) {
+  :is(.dark, .theme-chrome) :where(.border-blue-200) {
     border-color: oklch(40% 0.1 260);
   }
-  .dark :where(.border-blue-300) {
+  :is(.dark, .theme-chrome) :where(.border-blue-300) {
     border-color: oklch(46% 0.12 260);
   }
-  .dark :where(.text-blue-600) {
+  :is(.dark, .theme-chrome) :where(.text-blue-600) {
     color: oklch(75% 0.14 260);
   }
-  .dark :where(.hover\:text-blue-600):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-blue-600):hover {
     color: oklch(75% 0.14 260);
   }
-  .dark :where(.text-blue-700, .text-blue-800, .text-blue-900) {
+  :is(.dark, .theme-chrome) :where(.text-blue-700, .text-blue-800, .text-blue-900) {
     color: oklch(84% 0.1 260);
   }
-  .dark :where(.hover\:text-blue-700, .hover\:text-blue-800, .hover\:text-blue-900):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-blue-700, .hover\:text-blue-800, .hover\:text-blue-900):hover {
     color: oklch(84% 0.1 260);
   }
-  .dark :where(.ring-blue-100) {
+  :is(.dark, .theme-chrome) :where(.ring-blue-100) {
     --tw-ring-color: oklch(40% 0.1 260);
   }
-  .dark :where(.focus\:ring-blue-100):focus {
+  :is(.dark, .theme-chrome) :where(.focus\:ring-blue-100):focus {
     --tw-ring-color: oklch(40% 0.1 260);
   }
-  .dark :where(.focus-within\:ring-blue-100):focus-within {
+  :is(.dark, .theme-chrome) :where(.focus-within\:ring-blue-100):focus-within {
     --tw-ring-color: oklch(40% 0.1 260);
   }
   /* indigo */
-  .dark :where(.bg-indigo-50) {
+  :is(.dark, .theme-chrome) :where(.bg-indigo-50) {
     background-color: oklch(27% 0.06 280);
   }
-  .dark :where(.hover\:bg-indigo-50):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-indigo-50):hover {
     background-color: oklch(27% 0.06 280);
   }
-  .dark :where(.bg-indigo-100) {
+  :is(.dark, .theme-chrome) :where(.bg-indigo-100) {
     background-color: oklch(31% 0.08 280);
   }
-  .dark :where(.hover\:bg-indigo-100):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-indigo-100):hover {
     background-color: oklch(31% 0.08 280);
   }
-  .dark :where(.bg-indigo-200) {
+  :is(.dark, .theme-chrome) :where(.bg-indigo-200) {
     background-color: oklch(36% 0.1 280);
   }
-  .dark :where(.hover\:bg-indigo-200):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-indigo-200):hover {
     background-color: oklch(36% 0.1 280);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-indigo-50\/10,
       .bg-indigo-50\/20,
@@ -1247,7 +1246,7 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(27% 0.06 280) 70%, transparent);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-indigo-100\/10,
       .bg-indigo-100\/20,
@@ -1261,56 +1260,56 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(31% 0.08 280) 70%, transparent);
   }
-  .dark :where(.border-indigo-100) {
+  :is(.dark, .theme-chrome) :where(.border-indigo-100) {
     border-color: oklch(34% 0.09 280);
   }
-  .dark :where(.border-indigo-200) {
+  :is(.dark, .theme-chrome) :where(.border-indigo-200) {
     border-color: oklch(40% 0.1 280);
   }
-  .dark :where(.border-indigo-300) {
+  :is(.dark, .theme-chrome) :where(.border-indigo-300) {
     border-color: oklch(46% 0.12 280);
   }
-  .dark :where(.text-indigo-600) {
+  :is(.dark, .theme-chrome) :where(.text-indigo-600) {
     color: oklch(75% 0.14 280);
   }
-  .dark :where(.hover\:text-indigo-600):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-indigo-600):hover {
     color: oklch(75% 0.14 280);
   }
-  .dark :where(.text-indigo-700, .text-indigo-800, .text-indigo-900) {
+  :is(.dark, .theme-chrome) :where(.text-indigo-700, .text-indigo-800, .text-indigo-900) {
     color: oklch(84% 0.1 280);
   }
-  .dark :where(.hover\:text-indigo-700, .hover\:text-indigo-800, .hover\:text-indigo-900):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-indigo-700, .hover\:text-indigo-800, .hover\:text-indigo-900):hover {
     color: oklch(84% 0.1 280);
   }
-  .dark :where(.ring-indigo-100) {
+  :is(.dark, .theme-chrome) :where(.ring-indigo-100) {
     --tw-ring-color: oklch(40% 0.1 280);
   }
-  .dark :where(.focus\:ring-indigo-100):focus {
+  :is(.dark, .theme-chrome) :where(.focus\:ring-indigo-100):focus {
     --tw-ring-color: oklch(40% 0.1 280);
   }
-  .dark :where(.focus-within\:ring-indigo-100):focus-within {
+  :is(.dark, .theme-chrome) :where(.focus-within\:ring-indigo-100):focus-within {
     --tw-ring-color: oklch(40% 0.1 280);
   }
   /* violet */
-  .dark :where(.bg-violet-50) {
+  :is(.dark, .theme-chrome) :where(.bg-violet-50) {
     background-color: oklch(27% 0.06 295);
   }
-  .dark :where(.hover\:bg-violet-50):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-violet-50):hover {
     background-color: oklch(27% 0.06 295);
   }
-  .dark :where(.bg-violet-100) {
+  :is(.dark, .theme-chrome) :where(.bg-violet-100) {
     background-color: oklch(31% 0.08 295);
   }
-  .dark :where(.hover\:bg-violet-100):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-violet-100):hover {
     background-color: oklch(31% 0.08 295);
   }
-  .dark :where(.bg-violet-200) {
+  :is(.dark, .theme-chrome) :where(.bg-violet-200) {
     background-color: oklch(36% 0.1 295);
   }
-  .dark :where(.hover\:bg-violet-200):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-violet-200):hover {
     background-color: oklch(36% 0.1 295);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-violet-50\/10,
       .bg-violet-50\/20,
@@ -1324,7 +1323,7 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(27% 0.06 295) 70%, transparent);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-violet-100\/10,
       .bg-violet-100\/20,
@@ -1338,56 +1337,56 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(31% 0.08 295) 70%, transparent);
   }
-  .dark :where(.border-violet-100) {
+  :is(.dark, .theme-chrome) :where(.border-violet-100) {
     border-color: oklch(34% 0.09 295);
   }
-  .dark :where(.border-violet-200) {
+  :is(.dark, .theme-chrome) :where(.border-violet-200) {
     border-color: oklch(40% 0.1 295);
   }
-  .dark :where(.border-violet-300) {
+  :is(.dark, .theme-chrome) :where(.border-violet-300) {
     border-color: oklch(46% 0.12 295);
   }
-  .dark :where(.text-violet-600) {
+  :is(.dark, .theme-chrome) :where(.text-violet-600) {
     color: oklch(75% 0.14 295);
   }
-  .dark :where(.hover\:text-violet-600):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-violet-600):hover {
     color: oklch(75% 0.14 295);
   }
-  .dark :where(.text-violet-700, .text-violet-800, .text-violet-900) {
+  :is(.dark, .theme-chrome) :where(.text-violet-700, .text-violet-800, .text-violet-900) {
     color: oklch(84% 0.1 295);
   }
-  .dark :where(.hover\:text-violet-700, .hover\:text-violet-800, .hover\:text-violet-900):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-violet-700, .hover\:text-violet-800, .hover\:text-violet-900):hover {
     color: oklch(84% 0.1 295);
   }
-  .dark :where(.ring-violet-100) {
+  :is(.dark, .theme-chrome) :where(.ring-violet-100) {
     --tw-ring-color: oklch(40% 0.1 295);
   }
-  .dark :where(.focus\:ring-violet-100):focus {
+  :is(.dark, .theme-chrome) :where(.focus\:ring-violet-100):focus {
     --tw-ring-color: oklch(40% 0.1 295);
   }
-  .dark :where(.focus-within\:ring-violet-100):focus-within {
+  :is(.dark, .theme-chrome) :where(.focus-within\:ring-violet-100):focus-within {
     --tw-ring-color: oklch(40% 0.1 295);
   }
   /* purple */
-  .dark :where(.bg-purple-50) {
+  :is(.dark, .theme-chrome) :where(.bg-purple-50) {
     background-color: oklch(27% 0.06 305);
   }
-  .dark :where(.hover\:bg-purple-50):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-purple-50):hover {
     background-color: oklch(27% 0.06 305);
   }
-  .dark :where(.bg-purple-100) {
+  :is(.dark, .theme-chrome) :where(.bg-purple-100) {
     background-color: oklch(31% 0.08 305);
   }
-  .dark :where(.hover\:bg-purple-100):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-purple-100):hover {
     background-color: oklch(31% 0.08 305);
   }
-  .dark :where(.bg-purple-200) {
+  :is(.dark, .theme-chrome) :where(.bg-purple-200) {
     background-color: oklch(36% 0.1 305);
   }
-  .dark :where(.hover\:bg-purple-200):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-purple-200):hover {
     background-color: oklch(36% 0.1 305);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-purple-50\/10,
       .bg-purple-50\/20,
@@ -1401,7 +1400,7 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(27% 0.06 305) 70%, transparent);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-purple-100\/10,
       .bg-purple-100\/20,
@@ -1415,56 +1414,56 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(31% 0.08 305) 70%, transparent);
   }
-  .dark :where(.border-purple-100) {
+  :is(.dark, .theme-chrome) :where(.border-purple-100) {
     border-color: oklch(34% 0.09 305);
   }
-  .dark :where(.border-purple-200) {
+  :is(.dark, .theme-chrome) :where(.border-purple-200) {
     border-color: oklch(40% 0.1 305);
   }
-  .dark :where(.border-purple-300) {
+  :is(.dark, .theme-chrome) :where(.border-purple-300) {
     border-color: oklch(46% 0.12 305);
   }
-  .dark :where(.text-purple-600) {
+  :is(.dark, .theme-chrome) :where(.text-purple-600) {
     color: oklch(75% 0.14 305);
   }
-  .dark :where(.hover\:text-purple-600):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-purple-600):hover {
     color: oklch(75% 0.14 305);
   }
-  .dark :where(.text-purple-700, .text-purple-800, .text-purple-900) {
+  :is(.dark, .theme-chrome) :where(.text-purple-700, .text-purple-800, .text-purple-900) {
     color: oklch(84% 0.1 305);
   }
-  .dark :where(.hover\:text-purple-700, .hover\:text-purple-800, .hover\:text-purple-900):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-purple-700, .hover\:text-purple-800, .hover\:text-purple-900):hover {
     color: oklch(84% 0.1 305);
   }
-  .dark :where(.ring-purple-100) {
+  :is(.dark, .theme-chrome) :where(.ring-purple-100) {
     --tw-ring-color: oklch(40% 0.1 305);
   }
-  .dark :where(.focus\:ring-purple-100):focus {
+  :is(.dark, .theme-chrome) :where(.focus\:ring-purple-100):focus {
     --tw-ring-color: oklch(40% 0.1 305);
   }
-  .dark :where(.focus-within\:ring-purple-100):focus-within {
+  :is(.dark, .theme-chrome) :where(.focus-within\:ring-purple-100):focus-within {
     --tw-ring-color: oklch(40% 0.1 305);
   }
   /* fuchsia */
-  .dark :where(.bg-fuchsia-50) {
+  :is(.dark, .theme-chrome) :where(.bg-fuchsia-50) {
     background-color: oklch(27% 0.06 325);
   }
-  .dark :where(.hover\:bg-fuchsia-50):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-fuchsia-50):hover {
     background-color: oklch(27% 0.06 325);
   }
-  .dark :where(.bg-fuchsia-100) {
+  :is(.dark, .theme-chrome) :where(.bg-fuchsia-100) {
     background-color: oklch(31% 0.08 325);
   }
-  .dark :where(.hover\:bg-fuchsia-100):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-fuchsia-100):hover {
     background-color: oklch(31% 0.08 325);
   }
-  .dark :where(.bg-fuchsia-200) {
+  :is(.dark, .theme-chrome) :where(.bg-fuchsia-200) {
     background-color: oklch(36% 0.1 325);
   }
-  .dark :where(.hover\:bg-fuchsia-200):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-fuchsia-200):hover {
     background-color: oklch(36% 0.1 325);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-fuchsia-50\/10,
       .bg-fuchsia-50\/20,
@@ -1478,7 +1477,7 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(27% 0.06 325) 70%, transparent);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-fuchsia-100\/10,
       .bg-fuchsia-100\/20,
@@ -1492,56 +1491,56 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(31% 0.08 325) 70%, transparent);
   }
-  .dark :where(.border-fuchsia-100) {
+  :is(.dark, .theme-chrome) :where(.border-fuchsia-100) {
     border-color: oklch(34% 0.09 325);
   }
-  .dark :where(.border-fuchsia-200) {
+  :is(.dark, .theme-chrome) :where(.border-fuchsia-200) {
     border-color: oklch(40% 0.1 325);
   }
-  .dark :where(.border-fuchsia-300) {
+  :is(.dark, .theme-chrome) :where(.border-fuchsia-300) {
     border-color: oklch(46% 0.12 325);
   }
-  .dark :where(.text-fuchsia-600) {
+  :is(.dark, .theme-chrome) :where(.text-fuchsia-600) {
     color: oklch(75% 0.14 325);
   }
-  .dark :where(.hover\:text-fuchsia-600):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-fuchsia-600):hover {
     color: oklch(75% 0.14 325);
   }
-  .dark :where(.text-fuchsia-700, .text-fuchsia-800, .text-fuchsia-900) {
+  :is(.dark, .theme-chrome) :where(.text-fuchsia-700, .text-fuchsia-800, .text-fuchsia-900) {
     color: oklch(84% 0.1 325);
   }
-  .dark :where(.hover\:text-fuchsia-700, .hover\:text-fuchsia-800, .hover\:text-fuchsia-900):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-fuchsia-700, .hover\:text-fuchsia-800, .hover\:text-fuchsia-900):hover {
     color: oklch(84% 0.1 325);
   }
-  .dark :where(.ring-fuchsia-100) {
+  :is(.dark, .theme-chrome) :where(.ring-fuchsia-100) {
     --tw-ring-color: oklch(40% 0.1 325);
   }
-  .dark :where(.focus\:ring-fuchsia-100):focus {
+  :is(.dark, .theme-chrome) :where(.focus\:ring-fuchsia-100):focus {
     --tw-ring-color: oklch(40% 0.1 325);
   }
-  .dark :where(.focus-within\:ring-fuchsia-100):focus-within {
+  :is(.dark, .theme-chrome) :where(.focus-within\:ring-fuchsia-100):focus-within {
     --tw-ring-color: oklch(40% 0.1 325);
   }
   /* pink */
-  .dark :where(.bg-pink-50) {
+  :is(.dark, .theme-chrome) :where(.bg-pink-50) {
     background-color: oklch(27% 0.06 350);
   }
-  .dark :where(.hover\:bg-pink-50):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-pink-50):hover {
     background-color: oklch(27% 0.06 350);
   }
-  .dark :where(.bg-pink-100) {
+  :is(.dark, .theme-chrome) :where(.bg-pink-100) {
     background-color: oklch(31% 0.08 350);
   }
-  .dark :where(.hover\:bg-pink-100):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-pink-100):hover {
     background-color: oklch(31% 0.08 350);
   }
-  .dark :where(.bg-pink-200) {
+  :is(.dark, .theme-chrome) :where(.bg-pink-200) {
     background-color: oklch(36% 0.1 350);
   }
-  .dark :where(.hover\:bg-pink-200):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-pink-200):hover {
     background-color: oklch(36% 0.1 350);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-pink-50\/10,
       .bg-pink-50\/20,
@@ -1555,7 +1554,7 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(27% 0.06 350) 70%, transparent);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-pink-100\/10,
       .bg-pink-100\/20,
@@ -1569,56 +1568,56 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(31% 0.08 350) 70%, transparent);
   }
-  .dark :where(.border-pink-100) {
+  :is(.dark, .theme-chrome) :where(.border-pink-100) {
     border-color: oklch(34% 0.09 350);
   }
-  .dark :where(.border-pink-200) {
+  :is(.dark, .theme-chrome) :where(.border-pink-200) {
     border-color: oklch(40% 0.1 350);
   }
-  .dark :where(.border-pink-300) {
+  :is(.dark, .theme-chrome) :where(.border-pink-300) {
     border-color: oklch(46% 0.12 350);
   }
-  .dark :where(.text-pink-600) {
+  :is(.dark, .theme-chrome) :where(.text-pink-600) {
     color: oklch(75% 0.14 350);
   }
-  .dark :where(.hover\:text-pink-600):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-pink-600):hover {
     color: oklch(75% 0.14 350);
   }
-  .dark :where(.text-pink-700, .text-pink-800, .text-pink-900) {
+  :is(.dark, .theme-chrome) :where(.text-pink-700, .text-pink-800, .text-pink-900) {
     color: oklch(84% 0.1 350);
   }
-  .dark :where(.hover\:text-pink-700, .hover\:text-pink-800, .hover\:text-pink-900):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-pink-700, .hover\:text-pink-800, .hover\:text-pink-900):hover {
     color: oklch(84% 0.1 350);
   }
-  .dark :where(.ring-pink-100) {
+  :is(.dark, .theme-chrome) :where(.ring-pink-100) {
     --tw-ring-color: oklch(40% 0.1 350);
   }
-  .dark :where(.focus\:ring-pink-100):focus {
+  :is(.dark, .theme-chrome) :where(.focus\:ring-pink-100):focus {
     --tw-ring-color: oklch(40% 0.1 350);
   }
-  .dark :where(.focus-within\:ring-pink-100):focus-within {
+  :is(.dark, .theme-chrome) :where(.focus-within\:ring-pink-100):focus-within {
     --tw-ring-color: oklch(40% 0.1 350);
   }
   /* rose */
-  .dark :where(.bg-rose-50) {
+  :is(.dark, .theme-chrome) :where(.bg-rose-50) {
     background-color: oklch(27% 0.06 10);
   }
-  .dark :where(.hover\:bg-rose-50):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-rose-50):hover {
     background-color: oklch(27% 0.06 10);
   }
-  .dark :where(.bg-rose-100) {
+  :is(.dark, .theme-chrome) :where(.bg-rose-100) {
     background-color: oklch(31% 0.08 10);
   }
-  .dark :where(.hover\:bg-rose-100):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-rose-100):hover {
     background-color: oklch(31% 0.08 10);
   }
-  .dark :where(.bg-rose-200) {
+  :is(.dark, .theme-chrome) :where(.bg-rose-200) {
     background-color: oklch(36% 0.1 10);
   }
-  .dark :where(.hover\:bg-rose-200):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:bg-rose-200):hover {
     background-color: oklch(36% 0.1 10);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-rose-50\/10,
       .bg-rose-50\/20,
@@ -1632,7 +1631,7 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(27% 0.06 10) 70%, transparent);
   }
-  .dark
+  :is(.dark, .theme-chrome)
     :where(
       .bg-rose-100\/10,
       .bg-rose-100\/20,
@@ -1646,34 +1645,34 @@ body {
     ) {
     background-color: color-mix(in oklab, oklch(31% 0.08 10) 70%, transparent);
   }
-  .dark :where(.border-rose-100) {
+  :is(.dark, .theme-chrome) :where(.border-rose-100) {
     border-color: oklch(34% 0.09 10);
   }
-  .dark :where(.border-rose-200) {
+  :is(.dark, .theme-chrome) :where(.border-rose-200) {
     border-color: oklch(40% 0.1 10);
   }
-  .dark :where(.border-rose-300) {
+  :is(.dark, .theme-chrome) :where(.border-rose-300) {
     border-color: oklch(46% 0.12 10);
   }
-  .dark :where(.text-rose-600) {
+  :is(.dark, .theme-chrome) :where(.text-rose-600) {
     color: oklch(75% 0.14 10);
   }
-  .dark :where(.hover\:text-rose-600):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-rose-600):hover {
     color: oklch(75% 0.14 10);
   }
-  .dark :where(.text-rose-700, .text-rose-800, .text-rose-900) {
+  :is(.dark, .theme-chrome) :where(.text-rose-700, .text-rose-800, .text-rose-900) {
     color: oklch(84% 0.1 10);
   }
-  .dark :where(.hover\:text-rose-700, .hover\:text-rose-800, .hover\:text-rose-900):hover {
+  :is(.dark, .theme-chrome) :where(.hover\:text-rose-700, .hover\:text-rose-800, .hover\:text-rose-900):hover {
     color: oklch(84% 0.1 10);
   }
-  .dark :where(.ring-rose-100) {
+  :is(.dark, .theme-chrome) :where(.ring-rose-100) {
     --tw-ring-color: oklch(40% 0.1 10);
   }
-  .dark :where(.focus\:ring-rose-100):focus {
+  :is(.dark, .theme-chrome) :where(.focus\:ring-rose-100):focus {
     --tw-ring-color: oklch(40% 0.1 10);
   }
-  .dark :where(.focus-within\:ring-rose-100):focus-within {
+  :is(.dark, .theme-chrome) :where(.focus-within\:ring-rose-100):focus-within {
     --tw-ring-color: oklch(40% 0.1 10);
   }
 }

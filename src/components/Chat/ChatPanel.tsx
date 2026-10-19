@@ -159,7 +159,6 @@ export function ChatPanel({
         onChange={(id) => void selectConversation(id || null)}
         ariaLabel={t('chat:panel.conversationPicker')}
         title={t('chat:panel.conversationPicker')}
-        variant="light"
         size="xs"
         align="right"
         className="min-w-0 flex-1 font-medium"

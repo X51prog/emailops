@@ -3745,3 +3745,25 @@ background becomes dark text on a dark canvas. Inverting everything — a design
 dark would turn light, and a message with its own dark styles renders them better than any
 transformation. A per-message "show original colours" switch — a reasonable follow-up if the
 adaptation misfires on real newsletters; not needed to ship.
+
+## 2026-10-19 — Dark theme is uniform navy; on the light theme only the sidebar and dialogs stay dark
+
+**Decision:** Every screen is written in the inbox's light idiom, so Lenses, EO Docs, Skills, the
+dashboard, onboarding, the lock screen, the log panel and toasts are white on the light theme
+and navy on the dark theme like the inbox. The sidebar and the dialogs (the `Modal` shell,
+settings, account and IMAP dialogs, the AI-work dialog) carry `theme-chrome`: the dark palette
+applies inside them on either theme, so they stay dark on the light theme, as they always were,
+and match the rest on the dark theme. `theme-pinned` is gone. `src/lib/darkPalette.test.ts`
+fails on `theme-pinned`, an arbitrary hex colour class or a `neutral`/`zinc`/`slate`/`stone`
+class in a component, and on a dark override that does not also cover `.theme-chrome`. This
+supersedes the "dark-by-design chrome pinned" part of the first 2026-10-17 entry.
+**Context:** With the chrome pinned, the dark theme showed two backgrounds side by side: the
+pinned screens on neutral near-black (`#1e1e1e`) and the remapped content on navy. The developer
+wants one surface on the dark theme, and on the light theme wants the menu and the dialogs to
+keep their dark look.
+**Rejected:** Retuning the remap to neutral gray to match the pinned chrome — Lenses and EO Docs
+would stay dark on the light theme. Making the sidebar and dialogs white on the light theme too —
+the developer wants them dark there. Restoring their exact original classes (charcoal `#252526`
+dialogs) and adding per-colour dark overrides — two class sets to keep in step across ~70 files,
+for a tone difference the developer chose not to keep: the dialogs are now navy-dark on the light
+theme.

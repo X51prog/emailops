@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useOverlay } from '@/stores/overlayStore';
 
 /**
- * Generic dark-themed modal scaffold used across settings/dialogs/confirms.
+ * Generic modal scaffold used across settings/dialogs/confirms.
  *
  * Centralizes overlay + size + a11y wiring (Escape to close, click-outside to
  * close, header/body/footer slots) so callers stop duplicating the same
@@ -123,19 +123,19 @@ export function Modal({
       aria-modal={nonBlocking ? undefined : 'true'}
     >
       <div
-        className={`theme-pinned ${SIZE_CLASS[size]} flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-gray-700 bg-[#252526] shadow-2xl${
+        className={`theme-chrome ${SIZE_CLASS[size]} flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-2xl${
           nonBlocking ? ' pointer-events-auto' : ''
         }`}
       >
         {title !== undefined && (
-          <div className="flex items-start justify-between gap-4 border-b border-gray-700 px-6 py-4">
+          <div className="flex items-start justify-between gap-4 border-b border-gray-200 px-6 py-4">
             <div className="min-w-0 flex-1">
-              {title && <h2 className="text-sm font-semibold text-gray-100">{title}</h2>}
-              {subtitle && <p className="mt-0.5 text-xs text-gray-400">{subtitle}</p>}
+              {title && <h2 className="text-sm font-semibold text-gray-900">{title}</h2>}
+              {subtitle && <p className="mt-0.5 text-xs text-gray-500">{subtitle}</p>}
             </div>
             <button
               onClick={onClose}
-              className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-700 hover:text-white"
+              className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
               title={t('common:actions.close')}
               aria-label={t('common:actions.closeDialog')}
             >
@@ -151,7 +151,7 @@ export function Modal({
         </div>
 
         {footer && (
-          <div className="flex items-center justify-end gap-3 border-t border-gray-700 px-6 py-4">{footer}</div>
+          <div className="flex items-center justify-end gap-3 border-t border-gray-200 px-6 py-4">{footer}</div>
         )}
       </div>
     </div>

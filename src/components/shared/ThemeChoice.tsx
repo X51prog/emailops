@@ -74,12 +74,12 @@ function ThemeOption({
       aria-checked={selected}
       onClick={onClick}
       className={`flex flex-col items-start gap-2 p-3 rounded-lg border-2 text-left transition-colors ${
-        selected ? 'border-primary-500 bg-primary-500/10' : 'border-neutral-700 bg-neutral-800 hover:border-neutral-500'
+        selected ? 'border-primary-500 bg-primary-50' : 'border-gray-200 bg-white hover:border-gray-300'
       }`}
     >
-      <span className={selected ? 'text-primary-400' : 'text-neutral-400'}>{icon}</span>
-      <span className={`text-sm font-medium ${selected ? 'text-white' : 'text-neutral-300'}`}>{label}</span>
-      <span className="text-xs text-neutral-500">{description}</span>
+      <span className={selected ? 'text-primary-600' : 'text-gray-500'}>{icon}</span>
+      <span className={`text-sm font-medium ${selected ? 'text-gray-900' : 'text-gray-700'}`}>{label}</span>
+      <span className="text-xs text-gray-500">{description}</span>
     </button>
   );
 }
