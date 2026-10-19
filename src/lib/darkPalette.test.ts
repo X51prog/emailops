@@ -93,9 +93,10 @@ describe('dark theme palette (src/index.css)', () => {
     expect([...new Set(offenders)].sort()).toEqual([]);
   });
 
-  // The sidebar and the dialogs keep their dark look on the light theme.
+  // The sidebar, the log panel and the dialogs keep their dark look on the light theme.
   it.each([
     'Sidebar/Sidebar.tsx',
+    'LogPanel/LogPanel.tsx',
     'common/Modal.tsx',
     'Settings/SettingsDialog.tsx',
     'Sidebar/AccountSettingsDialog.tsx',

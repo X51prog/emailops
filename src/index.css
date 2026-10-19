@@ -185,7 +185,7 @@ body {
  * settings, modals, Lenses, EO Docs, onboarding… — is written in one light
  * idiom (`bg-white` + `text-gray-900`/`text-gray-500` + `border-gray-200`), so
  * all of them share the same surface: white on light, navy on dark. The
- * sidebar and the dialogs carry `theme-chrome`, which applies the dark palette
+ * sidebar, the log panel and the dialogs carry `theme-chrome`, which applies the dark palette
  * inside them on the light theme too: they stay dark there, as they always
  * were, and match everything else on the dark theme.
  *

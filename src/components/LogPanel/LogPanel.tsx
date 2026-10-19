@@ -234,7 +234,10 @@ export function LogPanel({ onOpenAiSettings }: { onOpenAiSettings?: () => void }
   }, [visibleEntries.length]);
 
   return (
-    <div ref={panelRef} className="flex flex-col border-t border-gray-200 bg-white text-gray-700 text-xs font-mono">
+    <div
+      ref={panelRef}
+      className="theme-chrome flex flex-col border-t border-gray-200 bg-white text-gray-700 text-xs font-mono"
+    >
       {/* Header bar */}
       <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50 border-b border-gray-200 select-none">
         <div className="flex min-w-0 items-center gap-3">
