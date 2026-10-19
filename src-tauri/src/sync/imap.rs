@@ -181,6 +181,82 @@ fn select_inbox_page(uids: Vec<u32>, page_token: Option<&str>, max_results: u32)
 /// hang a blocking task forever.
 const IO_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
 
+/// How an IMAP connection reaches TLS. 993 is IMAPS (TLS on connect); any
+/// other port (143, Proton Mail Bridge's 1143) greets in clear text and is
+/// upgraded with STARTTLS — the same port rule `test_smtp` applies to 465.
+/// A TLS handshake sent to a clear-text greeting fails with "record overflow".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ImapTlsMode {
+    Implicit,
+    StartTls,
+}
+
+impl ImapTlsMode {
+    fn for_port(port: u16) -> Self {
+        if port == 993 {
+            Self::Implicit
+        } else {
+            Self::StartTls
+        }
+    }
+}
+
+/// Read the clear-text greeting and issue `STARTTLS`, leaving `stream` at the
+/// point where the TLS handshake starts. Never falls back to clear text: a
+/// server that refuses STARTTLS is an error, so the password is not sent
+/// unencrypted.
+fn negotiate_starttls<S: std::io::Read + std::io::Write>(stream: &mut S) -> std::io::Result<()> {
+    use std::io;
+
+    let greeting = read_imap_line(stream)?;
+    if !greeting.starts_with("* OK") {
+        return Err(io::Error::new(
+            io::ErrorKind::ConnectionRefused,
+            format!("unexpected IMAP greeting: {greeting}"),
+        ));
+    }
+    stream.write_all(b"a0 STARTTLS\r\n")?;
+    stream.flush()?;
+    loop {
+        let line = read_imap_line(stream)?;
+        if line.starts_with("a0 OK") {
+            return Ok(());
+        }
+        if line.starts_with("a0 ") {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                format!("server refused STARTTLS: {line}"),
+            ));
+        }
+    }
+}
+
+/// One CRLF-terminated response line, read a byte at a time so nothing past
+/// it is buffered away from the TLS layer that takes over the socket next.
+fn read_imap_line<S: std::io::Read>(stream: &mut S) -> std::io::Result<String> {
+    use std::io;
+
+    const MAX_LINE: usize = 8 * 1024;
+    let mut line = Vec::new();
+    let mut byte = [0u8; 1];
+    while !line.ends_with(b"\r\n") {
+        if line.len() >= MAX_LINE {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "IMAP response line too long",
+            ));
+        }
+        if stream.read(&mut byte)? == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "IMAP server closed the connection before STARTTLS",
+            ));
+        }
+        line.push(byte[0]);
+    }
+    Ok(String::from_utf8_lossy(&line).trim_end().to_string())
+}
+
 /// Stream wrapper for the IDLE session. imap 2.4.1's `Handle::wait_with_timeout`
 /// sets the read timeout for the wait and then resets it to `None`, after
 /// which the `DONE` reply and every later command read with no timeout — a
@@ -795,9 +871,13 @@ impl ImapClient {
                 ))
             })?;
 
-        let tcp = TcpStream::connect_timeout(&addr, CONNECT_TIMEOUT).map_err(imap::Error::Io)?;
+        let mut tcp = TcpStream::connect_timeout(&addr, CONNECT_TIMEOUT).map_err(imap::Error::Io)?;
         tcp.set_read_timeout(Some(IO_TIMEOUT)).map_err(imap::Error::Io)?;
         tcp.set_write_timeout(Some(IO_TIMEOUT)).map_err(imap::Error::Io)?;
+
+        if ImapTlsMode::for_port(creds.port) == ImapTlsMode::StartTls {
+            negotiate_starttls(&mut tcp).map_err(imap::Error::Io)?;
+        }
 
         tls.connect(creds.host.as_str(), tcp)
             .map_err(|e| imap::Error::Bad(format!("TLS handshake failed: {e}")))
@@ -2312,6 +2392,83 @@ impl ImapClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tls_mode_is_implicit_only_on_imaps_port() {
+        assert_eq!(ImapTlsMode::for_port(993), ImapTlsMode::Implicit);
+        // Plain IMAP port and Proton Mail Bridge's default greet in clear text.
+        assert_eq!(ImapTlsMode::for_port(143), ImapTlsMode::StartTls);
+        assert_eq!(ImapTlsMode::for_port(1143), ImapTlsMode::StartTls);
+    }
+
+    /// In-memory stream: reads come from a scripted server, writes are captured.
+    struct ScriptedServer {
+        input: std::io::Cursor<Vec<u8>>,
+        written: Vec<u8>,
+    }
+
+    impl ScriptedServer {
+        fn new(server_says: &str) -> Self {
+            Self {
+                input: std::io::Cursor::new(server_says.as_bytes().to_vec()),
+                written: Vec::new(),
+            }
+        }
+    }
+
+    impl std::io::Read for ScriptedServer {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            self.input.read(buf)
+        }
+    }
+
+    impl std::io::Write for ScriptedServer {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.written.extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn starttls_sends_command_after_greeting_and_stops_at_tagged_ok() {
+        let mut server = ScriptedServer::new(
+            "* OK [CAPABILITY IMAP4rev1 STARTTLS] ready\r\na0 OK Begin TLS negotiation now\r\n\x16\x03\x01",
+        );
+        negotiate_starttls(&mut server).expect("starttls");
+        assert_eq!(server.written, b"a0 STARTTLS\r\n");
+        // Bytes after the tagged OK belong to the TLS layer and must stay unread.
+        assert_eq!(server.input.position() as usize, server.input.get_ref().len() - 3);
+    }
+
+    #[test]
+    fn starttls_skips_untagged_lines_before_the_tagged_reply() {
+        let mut server = ScriptedServer::new("* OK hi\r\n* CAPABILITY IMAP4rev1\r\na0 OK go\r\n");
+        negotiate_starttls(&mut server).expect("starttls");
+    }
+
+    #[test]
+    fn starttls_fails_when_server_refuses() {
+        // A server without STARTTLS must not fall back to a clear-text login.
+        let mut server = ScriptedServer::new("* OK hi\r\na0 BAD unknown command\r\n");
+        let err = negotiate_starttls(&mut server).expect_err("refused");
+        assert!(err.to_string().contains("a0 BAD"), "{err}");
+    }
+
+    #[test]
+    fn starttls_fails_on_bye_greeting() {
+        let mut server = ScriptedServer::new("* BYE too many connections\r\n");
+        assert!(negotiate_starttls(&mut server).is_err());
+        assert!(server.written.is_empty());
+    }
+
+    #[test]
+    fn starttls_fails_on_closed_connection() {
+        let mut server = ScriptedServer::new("* OK hi\r\n");
+        assert!(negotiate_starttls(&mut server).is_err());
+    }
 
     fn entries(names: &[&str]) -> Vec<ListedFolder> {
         names
