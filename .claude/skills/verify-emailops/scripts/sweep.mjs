@@ -455,6 +455,14 @@ await step('Cuentas', 'All accounts', 'la vista unificada muestra más filas que
   return ok(all >= single, `${all} filas (cuenta sola: ${single})`, `${all} < ${single}`);
 });
 await step('Cuentas', 'volver a la cuenta de trabajo', 'la cuenta demo-acct-work vuelve a estar seleccionada', async () => { await click('button*=ulises@emailopslabs.dev'); await sleep(1200); return `${await rows()} filas`; });
+await step('Cuentas', 'estrella en GitHub', 'el botón de estrella junto a Give feedback abre un diálogo de confirmación; Cancel lo cierra sin abrir el navegador', async () => {
+  await click('aria/Star on GitHub'); await sleep(600);
+  const dialog = await js(() => document.querySelector('[role="dialog"]')?.innerText || '');
+  if (!/Support EmailOps with a star on GitHub/.test(dialog)) return `FAIL: diálogo: ${dialog.slice(0, 80)}`;
+  if (!/github\.com\/emailops\/emailops/.test(dialog)) return `FAIL: el diálogo no nombra el repositorio`;
+  await click('button=Cancel'); await sleep(400);
+  return ok(!(await exists('[role="dialog"]')), 'diálogo con el repositorio, cerrado con Cancel', 'el diálogo sigue abierto tras Cancel');
+});
 
 // ---------- Otras vistas ----------
 if (!(await exists('button=Spam'))) { await click('button=Other Views'); await sleep(800); }
