@@ -317,7 +317,6 @@ export function NewEventDialog({
                 options={startOptions.map((m) => ({ value: String(m), label: timeLabel(m) }))}
                 ariaLabel={t('calendar:create.startTime')}
                 fullWidth
-                variant="light"
               />
             </div>
             <div className="flex-1 min-w-0">
@@ -330,7 +329,6 @@ export function NewEventDialog({
                 options={endOptions.map((m) => ({ value: String(m), label: timeLabel(m) }))}
                 ariaLabel={t('calendar:create.endTime')}
                 fullWidth
-                variant="light"
               />
             </div>
           </div>
@@ -348,7 +346,6 @@ export function NewEventDialog({
               }))}
               ariaLabel={t('calendar:create.recurrence.label')}
               fullWidth
-              variant="light"
             />
           </div>
 

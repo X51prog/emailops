@@ -54,24 +54,24 @@ export function SkillsSettings() {
   };
 
   if (isLoading) {
-    return <p className="text-gray-400 text-sm p-4">{t('common:state.loading')}</p>;
+    return <p className="text-gray-500 text-sm p-4">{t('common:state.loading')}</p>;
   }
 
   return (
     <SettingsPanel>
-      {error && <div className="p-3 bg-red-900/30 border border-red-800 rounded text-red-300 text-sm">{error}</div>}
+      {error && <div className="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">{error}</div>}
 
       <section>
         <div className="flex items-center justify-between py-2">
           <div>
-            <label className="block text-sm font-medium text-gray-300">{t('settings:skills.enable')}</label>
+            <label className="block text-sm font-medium text-gray-700">{t('settings:skills.enable')}</label>
             <p className="text-xs text-gray-500 mt-0.5">{t('settings:skills.enableDesc')}</p>
           </div>
           <button
             type="button"
             onClick={handleToggle}
             className={`relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-              enabled ? 'bg-primary-600' : 'bg-gray-600'
+              enabled ? 'bg-primary-600' : 'bg-gray-300'
             }`}
             role="switch"
             aria-checked={enabled}
@@ -86,15 +86,15 @@ export function SkillsSettings() {
       </section>
 
       <section className="space-y-2">
-        <h3 className="text-sm font-medium text-gray-300">{t('settings:skills.folderTitle')}</h3>
+        <h3 className="text-sm font-medium text-gray-700">{t('settings:skills.folderTitle')}</h3>
         <p className="text-xs text-gray-500">{t('settings:skills.folderDesc')}</p>
-        {overview?.dir && <code className="block text-xs text-gray-400 break-all">{overview.dir}</code>}
+        {overview?.dir && <code className="block text-xs text-gray-500 break-all">{overview.dir}</code>}
         <div className="flex gap-2">
           <button
             type="button"
             data-testid="skills-open-folder"
             onClick={() => void handleOpenFolder()}
-            className="px-3 py-1.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-200"
+            className="px-3 py-1.5 text-xs rounded bg-gray-100 hover:bg-gray-200 text-gray-800"
           >
             {t('settings:skills.openFolder')}
           </button>
@@ -102,7 +102,7 @@ export function SkillsSettings() {
             type="button"
             data-testid="skills-reload"
             onClick={() => void reload()}
-            className="px-3 py-1.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-200"
+            className="px-3 py-1.5 text-xs rounded bg-gray-100 hover:bg-gray-200 text-gray-800"
           >
             {t('settings:skills.reload')}
           </button>
@@ -110,24 +110,24 @@ export function SkillsSettings() {
       </section>
 
       <section className="space-y-2">
-        <h3 className="text-sm font-medium text-gray-300">{t('settings:skills.listTitle')}</h3>
+        <h3 className="text-sm font-medium text-gray-700">{t('settings:skills.listTitle')}</h3>
         {overview && overview.skills.length === 0 && overview.errors.length === 0 && (
           <p className="text-xs text-gray-500">{t('settings:skills.empty')}</p>
         )}
         <ul className="space-y-2">
           {overview?.skills.map((s) => (
             <li key={s.name} className="text-sm">
-              <code className="text-primary-400">/{s.name}</code>
-              <p className="text-xs text-gray-400 mt-0.5">{s.description}</p>
+              <code className="text-primary-600">/{s.name}</code>
+              <p className="text-xs text-gray-500 mt-0.5">{s.description}</p>
             </li>
           ))}
         </ul>
         {overview && overview.errors.length > 0 && (
           <div className="space-y-1">
-            <p className="text-xs font-medium text-red-300">{t('settings:skills.errorsTitle')}</p>
+            <p className="text-xs font-medium text-red-700">{t('settings:skills.errorsTitle')}</p>
             <ul className="space-y-1">
               {overview.errors.map((e) => (
-                <li key={e.path} className="text-xs text-red-300/80">
+                <li key={e.path} className="text-xs text-red-700">
                   <code className="break-all">{e.path}</code>: {errorText(e)}
                 </li>
               ))}

@@ -44,7 +44,7 @@ export function FeedbackMenu({ onSelect }: FeedbackMenuProps) {
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-primary-300 bg-primary-500/10 hover:bg-primary-500/20 border border-primary-500/30 rounded-lg transition-colors"
+        className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-primary-700 bg-primary-50 hover:bg-primary-100 border border-primary-200 rounded-lg transition-colors"
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
@@ -60,7 +60,7 @@ export function FeedbackMenu({ onSelect }: FeedbackMenuProps) {
       {open && (
         <div
           role="menu"
-          className="absolute left-0 right-0 mt-1 z-20 py-1 bg-gray-800 border border-gray-700 rounded-lg shadow-lg overflow-hidden"
+          className="absolute left-0 right-0 mt-1 z-20 py-1 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden"
         >
           {FEEDBACK_TYPES.map((type) => (
             <button
@@ -71,7 +71,7 @@ export function FeedbackMenu({ onSelect }: FeedbackMenuProps) {
                 onSelect(type);
                 setOpen(false);
               }}
-              className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors"
+              className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
             >
               {t(`sidebar:feedback.${type}` as const)}
             </button>
