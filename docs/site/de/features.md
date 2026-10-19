@@ -384,6 +384,15 @@ E-Mails dunkel angezeigt, wann immer es möglich ist: eine E-Mail mit eigenem du
 es, eine einfache E-Mail oder ein helles Design wird angepasst, und ein bereits dunkles Design
 bleibt, wie es ist.
 
+<!-- claim:feat-interface-3 -->
+**Einstellungen → Über** zeigt die laufende Version, mit Links zur Website, zum Quellcode auf
+GitHub und zu **Projekt unterstützen ♥**, das die GitHub-Sponsors-Seite des Projekts öffnet.
+
+<!-- claim:feat-interface-4 -->
+Die Werkzeugleiste beim Verfassen hat eine Auswahl für **Schriftart** und eine für
+**Schriftgröße**. Beide folgen dem Cursor und zeigen Schriftart und Größe des Textes, in dem Sie
+gerade schreiben.
+
 ## Tastenkombinationen {#keyboard-shortcuts}
 
 <!-- claim:feat-shortcuts-1 -->

@@ -376,6 +376,14 @@ conserva entre reinicios. Con el tema oscuro, los correos también se muestran o
 es posible: un correo que trae su propio diseño oscuro lo usa, uno sencillo o de diseño claro se
 adapta, y uno que ya es oscuro se deja tal cual.
 
+<!-- claim:feat-interface-3 -->
+**Ajustes → Acerca de** muestra la versión que estás usando, con enlaces al sitio web, al código
+fuente en GitHub y a **Apoya el proyecto ♥**, que abre la página de GitHub Sponsors del proyecto.
+
+<!-- claim:feat-interface-4 -->
+La barra de herramientas de redacción tiene un selector de **Fuente** y otro de **Tamaño de
+fuente**. Los dos siguen al cursor, así que muestran la fuente y el tamaño del texto en el que estás.
+
 ## Atajos de teclado {#keyboard-shortcuts}
 
 <!-- claim:feat-shortcuts-1 -->

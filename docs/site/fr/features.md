@@ -390,6 +390,14 @@ est conservé d'un redémarrage à l'autre. Avec le thème sombre, les e-mails s
 sombre dès que c'est possible : un e-mail qui apporte son propre design sombre l'utilise, un e-mail
 simple ou au design clair est adapté, et un design déjà sombre est laissé tel quel.
 
+<!-- claim:feat-interface-3 -->
+**Paramètres → À propos** affiche la version que vous utilisez, avec des liens vers le site web, le
+code source sur GitHub et **Soutenir le projet ♥**, qui ouvre la page GitHub Sponsors du projet.
+
+<!-- claim:feat-interface-4 -->
+La barre d'outils de rédaction propose un sélecteur de **Police** et un de **Taille de police**.
+Tous deux suivent le curseur : ils montrent la police et la taille du texte où vous vous trouvez.
+
 ## Raccourcis clavier {#keyboard-shortcuts}
 
 <!-- claim:feat-shortcuts-1 -->

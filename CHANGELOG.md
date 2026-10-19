@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+No unreleased changes yet.
+
+## [0.6.16] — 2026-10-19
+
 ### Added
 
 - **Dark theme.** **Settings → Appearance → Theme** chooses **Light**, **Dark** or
@@ -22,9 +26,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   About opens the sponsor page.
 - **Test a Lens's filters before saving.** **Test** in the Lens settings shows
   how many emails the filters match and the three most recent ones.
+- **Not spam.** A conversation filed in Spam offers **Not spam** (also in the
+  email row menu): it moves back to the Inbox, its junk flags are cleared and
+  the move is written back to the provider.
+- **All / Unread toggle on email lists.** **Unread** keeps the conversations
+  with any unread message (the unread messages themselves in a flat view).
+- **Font and font size in the compose toolbar**, which follows the cursor.
 
 ### Fixed
 
+- **IMAP on ports other than 993** (Proton Mail Bridge on 1143, plain IMAP on
+  143) upgrades with STARTTLS instead of failing with "record overflow", and
+  refuses to continue in clear text if the server declines.
+- IMAP sync reuses one session per sync pass and retries failed connections.
+- **Linux AppImage:** the webview recovers from COLRv1 color-font crashes, and
+  the AppImage now builds on Ubuntu 24.04.
+- AI drafts sign with the account's name instead of a "[Your name]"
+  placeholder.
+- A PDF tab keeps its scroll position across tab switches.
 - **Linux: every dropdown follows the theme.** The chat's account and
   conversation pickers, EO Docs' kind and folder selects and the onboarding
   language picker were native `<select>` elements, whose popup WebKitGTK
@@ -40,6 +59,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   each under its own forwarded-message header, plus every message's
   attachments. It used to carry only the latest message, so anything that
   reply had not quoted, such as the opening message, was lost.
+
+### Security
+
+- rustls 0.23.46 (RUSTSEC-2026-0346..0349) and quinn-proto 0.11.19
+  (RUSTSEC-2026-0338..0342).
 
 ## [0.6.15] — 2026-10-08
 

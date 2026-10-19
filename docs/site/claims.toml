@@ -836,7 +836,17 @@ checks = [
 [feat-signatures-3]
 checks = [
   { manual = 'The "-- " line is derived in the frontend (htmlToPlainText with signatureDelimiter) and covered by src/lib/composeHtml vitest tests; not run by this harness.', covers = ["In the plain-text version of a message, a signature that ends it is preceded by the standard -- line, so other mail apps can recognise it."] },
-  { tests = ['services::emails::drafts::tests::sign_off_is_left_to_the_app_when_the_signature_applies', 'services::emails::drafts::tests::sign_off_follows_the_option_for_the_draft_kind', 'services::emails::drafts::tests::per_draft_section_carries_the_sign_off_rule_with_a_signature', 'services::emails::drafts::tests::sign_off_is_unchanged_without_a_signature'], covers = ["When the account has a signature for that kind of message, AI drafts leave your name and contact details out and let the signature sign."] },
+  { tests = ['services::emails::drafts::tests::sign_off_is_left_to_the_app_when_the_signature_applies', 'services::emails::drafts::tests::sign_off_follows_the_option_for_the_draft_kind', 'services::emails::drafts::tests::per_draft_section_carries_the_sign_off_rule_with_a_signature', 'services::emails::drafts::tests::sign_off_is_the_first_name_without_a_signature'], covers = ["When the account has a signature for that kind of message, AI drafts leave your name and contact details out and let the signature sign."] },
+]
+
+[feat-interface-3]
+checks = [
+  { judge = "Open Settings → About. Does it show the running version and links to the website, the source code on GitHub and Sponsor the project ♥, and does the sponsor link point at the project's GitHub Sponsors page?", evidence = ["file:src/components/Settings/AboutSettings.tsx", "file:src/locales/en/settings.json"], covers = ["Settings → About shows the version you are running, with links to the website, the source code on GitHub and Sponsor the project ♥, which opens the project's GitHub Sponsors page."] },
+]
+
+[feat-interface-4]
+checks = [
+  { judge = "Open the composer. Does its toolbar offer a Font and a Font size picker, and do both show the font and size at the cursor as it moves through differently formatted text?", evidence = ["file:src/components/shared/RichTextEditor.tsx", "file:src/locales/en/compose.json"], covers = ["The compose toolbar has a Font and a Font size picker.", "Both follow the cursor, so they show the font and size of the text you are in."] },
 ]
 
 [feat-shortcuts-1]

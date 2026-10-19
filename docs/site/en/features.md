@@ -358,6 +358,14 @@ across restarts. On the dark theme, messages are shown dark too whenever they ca
 that brings its own dark design uses it, a plain message or a light design is adapted, and a
 design that is already dark is left as it is.
 
+<!-- claim:feat-interface-3 -->
+**Settings → About** shows the version you are running, with links to the website, the source code
+on GitHub and **Sponsor the project ♥**, which opens the project's GitHub Sponsors page.
+
+<!-- claim:feat-interface-4 -->
+The compose toolbar has a **Font** and a **Font size** picker. Both follow the cursor, so they show
+the font and size of the text you are in.
+
 ## Keyboard shortcuts {#keyboard-shortcuts}
 
 <!-- claim:feat-shortcuts-1 -->
