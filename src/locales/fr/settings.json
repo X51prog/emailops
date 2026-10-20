@@ -526,8 +526,8 @@
   },
   "calendar": {
     "accountsLabel": "Comptes avec calendrier",
-    "accountsDesc": "L'intégration du calendrier est activée par défaut pour les comptes Gmail et Outlook, et se désactive d'elle-même si un compte n'a pas accordé l'autorisation d'accès au calendrier. Seuls les comptes activés disposent de la vue calendrier, des cartes d'invitation, des notifications de réunion et de l'outil calendrier du chat.",
-    "noCapableAccounts": "Connectez un compte Gmail ou Outlook pour utiliser le calendrier.",
+    "accountsDesc": "L’intégration du calendrier est activée par défaut pour les comptes Gmail et Outlook, et pour les comptes IMAP dès qu’ils sont abonnés à un flux de calendrier ci-dessous. Elle se désactive d’elle-même quand un compte n’a pas accordé l’autorisation calendrier. Seuls les comptes activés ont la vue calendrier, les cartes d’invitation, les rappels de réunion et l’outil calendrier du chat.",
+    "noCapableAccounts": "Connectez un compte Gmail ou Outlook, ou abonnez un compte IMAP à un flux de calendrier ci-dessous, pour utiliser le calendrier.",
     "accountToggleAria": "Activer ou désactiver l'intégration du calendrier de {{email}}",
     "notificationsLabel": "Notifications de réunion",
     "notificationsDesc": "Soyez averti avant une réunion, avec un lien direct pour la rejoindre.",
@@ -536,7 +536,17 @@
     "leadTimeLabel": "Délai de notification",
     "leadTimeDesc": "Combien de temps avant le début de la réunion la notification est envoyée.",
     "minutesOption": "{{n}} minutes",
-    "primaryCalendar": "principal"
+    "primaryCalendar": "principal",
+    "feedsLabel": "Flux de calendrier (comptes IMAP)",
+    "feedsDesc": "Abonnez un compte IMAP à un calendrier publié (URL ICS). Le calendrier est en lecture seule et se rafraîchit toutes les quelques minutes ; le lien est conservé dans votre trousseau.",
+    "feedLabelPlaceholder": "Nom (facultatif)",
+    "feedUrlPlaceholder": "https://…/calendar.ics",
+    "addFeed": "Ajouter",
+    "addingFeed": "Ajout…",
+    "removeFeed": "Retirer",
+    "removeFeedAria": "Retirer le flux de calendrier {{label}}",
+    "noFeeds": "Aucun flux de calendrier pour l’instant.",
+    "protonHelp": "Proton Calendar : dans l’application web, ouvrez les paramètres du calendrier → Partager via un lien → créez un lien en vue complète, puis collez-le ici. Proton publie les modifications avec un délai pouvant atteindre quelques heures."
   },
   "aiTranslation": {
     "enable": "Activer la traduction IA",

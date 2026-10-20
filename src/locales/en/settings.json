@@ -526,8 +526,8 @@
   },
   "calendar": {
     "accountsLabel": "Calendar accounts",
-    "accountsDesc": "Calendar integration is on by default for Gmail and Outlook accounts and switches itself off when an account hasn't granted calendar permission. Only enabled accounts get the calendar view, invite cards, meeting notifications and the chat calendar tool.",
-    "noCapableAccounts": "Connect a Gmail or Outlook account to use the calendar.",
+    "accountsDesc": "Calendar integration is on by default for Gmail and Outlook accounts, and for IMAP accounts once they subscribe to a calendar feed below. It switches itself off when an account hasn't granted calendar permission. Only enabled accounts get the calendar view, invite cards, meeting notifications and the chat calendar tool.",
+    "noCapableAccounts": "Connect a Gmail or Outlook account, or subscribe an IMAP account to a calendar feed below, to use the calendar.",
     "accountToggleAria": "Toggle calendar integration for {{email}}",
     "notificationsLabel": "Meeting notifications",
     "notificationsDesc": "Get notified before an upcoming meeting, with a direct join link.",
@@ -536,7 +536,17 @@
     "leadTimeLabel": "Notification lead time",
     "leadTimeDesc": "How long before the meeting starts the notification fires.",
     "minutesOption": "{{n}} minutes",
-    "primaryCalendar": "primary"
+    "primaryCalendar": "primary",
+    "feedsLabel": "Calendar feeds (IMAP accounts)",
+    "feedsDesc": "Subscribe an IMAP account to a published calendar (ICS URL). The calendar is read-only and refreshes every few minutes; the link is kept in your keychain.",
+    "feedLabelPlaceholder": "Name (optional)",
+    "feedUrlPlaceholder": "https://…/calendar.ics",
+    "addFeed": "Add",
+    "addingFeed": "Adding…",
+    "removeFeed": "Remove",
+    "removeFeedAria": "Remove the calendar feed {{label}}",
+    "noFeeds": "No calendar feeds yet.",
+    "protonHelp": "Proton Calendar: in the web app open the calendar's settings → Share via link → create a link with Full view, then paste it here. Proton publishes changes with a delay of up to a few hours."
   },
   "aiTranslation": {
     "enable": "Enable AI translation",

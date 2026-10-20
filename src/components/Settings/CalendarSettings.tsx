@@ -9,6 +9,7 @@ import { useAccountStore } from '@/stores/accountStore';
 import { calendarCapableAccounts, useCalendarIntegrationStore } from '@/stores/calendarIntegrationStore';
 import { useLogStore } from '@/stores/logStore';
 import type { Calendar } from '@/types';
+import { CalendarFeedsSection } from './CalendarFeedsSection';
 import { SettingsPanel } from './SettingsPanel';
 
 /** Lead-time choices for the upcoming-meeting notification (minutes). */
@@ -39,6 +40,7 @@ export function CalendarSettings() {
   const setIntegrationEnabled = useCalendarIntegrationStore((s) => s.setEnabled);
   const feedsByAccount = useCalendarIntegrationStore((s) => s.feedsByAccount);
   const capableAccounts = calendarCapableAccounts(accounts, feedsByAccount);
+  const imapAccounts = accounts.filter((a) => a.enabled && a.provider === 'imap');
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [showTitle, setShowTitle] = useState(false);
   const [leadMinutes, setLeadMinutes] = useState<number>(DEFAULT_LEAD_MINUTES);
@@ -324,6 +326,8 @@ export function CalendarSettings() {
           </div>
         )}
       </section>
+
+      <CalendarFeedsSection accounts={imapAccounts} />
 
       <section className="rounded-lg border border-gray-200 bg-white px-4 py-3">
         <div className="flex items-start justify-between gap-4">

@@ -526,8 +526,8 @@
   },
   "calendar": {
     "accountsLabel": "Cuentas con calendario",
-    "accountsDesc": "La integración de calendario está activada por defecto en cuentas de Gmail y Outlook, y se desactiva sola si la cuenta no ha concedido permiso de calendario. Solo las cuentas activadas tienen vista de calendario, tarjetas de invitación, avisos de reuniones y la herramienta de calendario del chat.",
-    "noCapableAccounts": "Conecta una cuenta de Gmail u Outlook para usar el calendario.",
+    "accountsDesc": "La integración de calendario está activada por defecto en cuentas de Gmail y Outlook, y en cuentas IMAP cuando se suscriben a un feed de calendario más abajo. Se desactiva sola cuando una cuenta no ha concedido permiso de calendario. Solo las cuentas activadas tienen vista de calendario, tarjetas de invitación, avisos de reunión y la herramienta de calendario del chat.",
+    "noCapableAccounts": "Conecta una cuenta de Gmail u Outlook, o suscribe una cuenta IMAP a un feed de calendario más abajo, para usar el calendario.",
     "accountToggleAria": "Activar o desactivar la integración de calendario de {{email}}",
     "notificationsLabel": "Notificaciones de reuniones",
     "notificationsDesc": "Recibe un aviso antes de cada reunión, con enlace directo para unirte.",
@@ -536,7 +536,17 @@
     "leadTimeLabel": "Antelación del aviso",
     "leadTimeDesc": "Cuánto tiempo antes del inicio de la reunión se envía el aviso.",
     "minutesOption": "{{n}} minutos",
-    "primaryCalendar": "principal"
+    "primaryCalendar": "principal",
+    "feedsLabel": "Feeds de calendario (cuentas IMAP)",
+    "feedsDesc": "Suscribe una cuenta IMAP a un calendario publicado (URL ICS). El calendario es de solo lectura y se actualiza cada pocos minutos; el enlace se guarda en tu llavero.",
+    "feedLabelPlaceholder": "Nombre (opcional)",
+    "feedUrlPlaceholder": "https://…/calendar.ics",
+    "addFeed": "Añadir",
+    "addingFeed": "Añadiendo…",
+    "removeFeed": "Quitar",
+    "removeFeedAria": "Quitar el feed de calendario {{label}}",
+    "noFeeds": "Todavía no hay feeds de calendario.",
+    "protonHelp": "Proton Calendar: en la app web abre los ajustes del calendario → Compartir mediante enlace → crea un enlace con vista completa y pégalo aquí. Proton publica los cambios con un retraso de hasta unas horas."
   },
   "aiTranslation": {
     "enable": "Activar traducción con IA",
