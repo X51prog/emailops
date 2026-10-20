@@ -1,4 +1,4 @@
-use crate::models::{Calendar, CalendarEvent};
+use crate::models::{Calendar, CalendarEvent, CalendarFeed};
 use crate::services;
 use crate::{AppError, AppState};
 use tauri::State;
@@ -170,4 +170,50 @@ pub async fn sync_calendar_now(state: State<'_, AppState>, account_id: String) -
         chrono::Utc::now().timestamp(),
     )
     .await
+}
+
+/// Subscribed ICS feeds of an IMAP account (Settings → Calendar). Only the
+/// label and host are returned; the URL stays in the vault.
+#[tauri::command]
+pub async fn list_calendar_feeds(
+    state: State<'_, AppState>,
+    account_id: String,
+) -> Result<Vec<CalendarFeed>, AppError> {
+    services::calendar::feeds::list_feeds(&state.db, &account_id)
+}
+
+/// Subscribe an IMAP account to a read-only ICS feed (e.g. a Proton Calendar
+/// "share via link" URL). Validates and fetches the URL once, stores it in the
+/// secrets vault and mirrors the calendar right away. A blank `label` takes
+/// the feed's own name.
+#[tauri::command]
+pub async fn add_calendar_feed(
+    state: State<'_, AppState>,
+    account_id: String,
+    label: String,
+    url: String,
+) -> Result<CalendarFeed, AppError> {
+    let account = state
+        .db
+        .get_account(&account_id)?
+        .ok_or_else(|| AppError::NotFound(format!("account '{account_id}' not found")))?;
+    services::calendar::feeds::add_feed(
+        &state.db,
+        &account,
+        &label,
+        &url,
+        std::sync::Arc::new(crate::sync::ics_feed_calendar::ReqwestIcsFetcher::default()),
+        chrono::Utc::now().timestamp(),
+    )
+    .await
+}
+
+/// Unsubscribe from a feed: its calendar, events and stored URL go with it.
+#[tauri::command]
+pub async fn remove_calendar_feed(
+    state: State<'_, AppState>,
+    account_id: String,
+    feed_id: String,
+) -> Result<(), AppError> {
+    services::calendar::feeds::remove_feed(&state.db, &account_id, &feed_id)
 }
