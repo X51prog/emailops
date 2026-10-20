@@ -104,5 +104,16 @@
     "hideOne": "{{name}} ausblenden",
     "showOne": "{{name}} einblenden"
   },
-  "createInProton": "Proton Calendar wird geöffnet, um den Termin anzulegen – wähle dort Uhrzeit und Kalender (der geteilte Feed ist schreibgeschützt; Änderungen erscheinen hier innerhalb weniger Stunden)."
+  "createInProton": "Proton Calendar wird geöffnet, um den Termin anzulegen – wähle dort Uhrzeit und Kalender (der geteilte Feed ist schreibgeschützt; Änderungen erscheinen hier innerhalb weniger Stunden).",
+  "panel": {
+    "title": "Agenda",
+    "open": "Kalenderbereich öffnen",
+    "close": "Kalenderbereich schließen",
+    "openFull": "Vollständigen Kalender öffnen",
+    "noEvents": "An diesem Tag ist nichts geplant.",
+    "setupTitle": "Für dieses Konto gibt es noch keinen Kalender",
+    "setupBody": "IMAP-Konten zeigen einen Kalender, sobald du in Einstellungen → Kalender einen Kalender-Feed abonnierst (bei Proton Calendar den Link zum Teilen).",
+    "setupButton": "In den Einstellungen einrichten",
+    "addEvent": "Neuer Termin an diesem Tag"
+  }
 }
