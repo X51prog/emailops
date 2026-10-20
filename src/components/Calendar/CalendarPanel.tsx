@@ -83,7 +83,7 @@ export function CalendarPanel({
   const iconButton = 'rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600';
 
   return (
-    <div className="flex h-full flex-col bg-white">
+    <div data-testid="calendar-panel" className="flex h-full flex-col bg-white">
       <div className="flex items-center gap-1 border-b border-gray-200 bg-white px-2 py-1.5">
         <span className="min-w-0 flex-1 truncate px-1 text-sm font-medium text-gray-900">
           {t('calendar:panel.title')}

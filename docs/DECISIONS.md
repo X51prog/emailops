@@ -3768,3 +3768,28 @@ the developer wants them dark there. Restoring their exact original classes (cha
 dialogs) and adding per-colour dark overrides — two class sets to keep in step across ~70 files,
 for a tone difference the developer chose not to keep: the dialogs are now navy-dark on the light
 theme.
+
+## 2026-10-20 — IMAP accounts get a read-only calendar from subscribed ICS feeds; Proton creates in Proton
+
+**Decision:** An IMAP account can subscribe to published iCalendar feeds (Settings → Calendar
+→ Calendar feeds). Each feed is a read-only calendar of that account (`access_role = reader`),
+expanded locally (RRULE / EXDATE / RECURRENCE-ID via the `rrule` crate) inside the usual sync
+window; the feed URL lives in the secrets vault because a Proton share link embeds the
+calendar's decryption key. The calendar's default surface is a day agenda in the right dock,
+shared with the chat (one at a time, same width pref), with a calendar button right below the
+chat button on the collapsed rail; the full grid is reached from the panel. On a Proton feed,
+double-clicking an empty slot opens Proton Calendar's create-event deep link for that day
+(`calendar.proton.me/week/Y/M/D?action=create`) instead of the in-app dialog.
+**Context:** Proton Calendar has no CalDAV and no public API (Bridge only exposes IMAP/SMTP);
+the only supported route out is the "share via link" ICS feed, read-only by design. Proton
+Meet has no API either, so creating a Meet meeting from EmailOps was dropped from the task.
+The capability check became account-aware (`CalendarKind`: Google / Outlook / IcsFeeds) so
+the scheduler, chat tools, commands and CLI all agree on which accounts have a calendar.
+**Rejected:** Detecting "Proton accounts" (Bridge host / address domain) and special-casing
+them — the ICS mechanism is provider-neutral and the only Proton-specific affordance is keyed
+on the feed's host. Writing the feed URL to SQLite — it is a credential. Hand-rolled RRULE
+expansion — DST and monthly BYDAY rules are where home-grown code goes wrong. Keeping the
+2026-07-23 stance ("no open-provider-to-create link") for feeds — a feed has no write API, so
+the hand-over is the only way to create from the calendar; the in-app dialog remains the path
+for every writable calendar.
+

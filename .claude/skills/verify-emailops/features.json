@@ -521,13 +521,17 @@
         "db::calendars",
         "sync::gmail_calendar",
         "sync::outlook_calendar",
-        "sync::calendar_provider"
+        "sync::calendar_provider",
+        "sync::ics_feed_calendar"
       ],
       "vitest": [
         "src/components/Calendar",
         "src/lib/calendar",
         "src/stores/calendarIntegrationStore",
-        "src/lib/apiContract/calendario.api.test"
+        "src/lib/apiContract/calendario.api.test",
+        "src/hooks/useCalendar",
+        "src/components/RightDock",
+        "src/lib/rightDockLayout"
       ],
       "e2e": [
         "Vistas/Calendar"

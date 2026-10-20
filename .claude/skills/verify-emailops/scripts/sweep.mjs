@@ -458,12 +458,18 @@ await step('Cuentas', 'volver a la cuenta de trabajo', 'la cuenta demo-acct-work
 
 // ---------- Otras vistas ----------
 if (!(await exists('button=Spam'))) { await click('button=Other Views'); await sleep(800); }
-const optional = { Calendar: 'el calendario solo se activa en cuentas Gmail/Outlook' };
+const optional = {};
 for (const view of ['Tag Board', 'Attachments', 'Drafts', 'Scheduled', 'Sent', 'Starred', 'Snoozed', 'Calendar', 'Spam', 'Deleted', 'Contacts', 'Dashboard', 'Tasks', 'Lenses', 'Memory']) {
   await step('Vistas', view, `la vista ${view} abre sin errores y con contenido`, async () => {
     const sel = `button*=${view}`;
     if (!(await exists(sel))) return optional[view] ? `SKIP: ${optional[view]}` : `FAIL: no hay entrada "${view}" en la barra lateral`;
     await click(sel); await sleep(1800);
+    if (view === 'Calendar') {
+      // La entrada abre la agenda en el dock derecho; la cuadrícula completa
+      // está en el botón de expandir de su cabecera.
+      if (!(await exists('[data-testid="calendar-panel"]'))) return 'FAIL: el panel de calendario no se abre';
+      await click('button[aria-label="Open full calendar"]'); await sleep(1800);
+    }
     const t = (await js(() => (document.querySelector('main') || document.body).innerText)).replace(/\s+/g, ' ').trim();
     const h2 = await js(() => document.querySelector('h2')?.textContent.trim() || '');
     if (['Sent', 'Spam', 'Deleted', 'Drafts', 'Attachments'].includes(view) && h2 && !new RegExp(view, 'i').test(h2) && /Inbox/.test(h2)) return `FAIL: la cabecera dice "${h2}" en la vista ${view}`;
