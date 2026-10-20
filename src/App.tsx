@@ -417,9 +417,10 @@ function AppInner() {
   useEffect(() => {
     void loadCalendarIntegration(accounts);
   }, [accounts, loadCalendarIntegration]);
+  const calendarFeeds = useCalendarIntegrationStore((s) => s.feedsByAccount);
   const calendarFeatureEnabled = useMemo(
-    () => calendarEnabledAccounts(accounts, calendarIntegrationIds).length > 0,
-    [accounts, calendarIntegrationIds],
+    () => calendarEnabledAccounts(accounts, calendarIntegrationIds, calendarFeeds).length > 0,
+    [accounts, calendarIntegrationIds, calendarFeeds],
   );
   // Leaving the calendar view when its last account gets switched off.
   useEffect(() => {

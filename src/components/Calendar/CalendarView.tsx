@@ -43,13 +43,14 @@ export function CalendarView({ accounts, defaultAccountId }: CalendarViewProps) 
   const addLog = useLogStore((s) => s.addLog);
 
   // Only offer accounts whose calendar integration the user enabled in
-  // Settings → Calendar (IMAP has no calendar support backend-side).
+  // Settings → Calendar (an IMAP account counts once it has an ICS feed).
   const calendarIntegrationIds = useCalendarIntegrationStore((s) => s.enabledIds);
   const integrationLoaded = useCalendarIntegrationStore((s) => s.isLoaded);
   const setIntegrationEnabled = useCalendarIntegrationStore((s) => s.setEnabled);
+  const feedsByAccount = useCalendarIntegrationStore((s) => s.feedsByAccount);
   const calendarAccounts = useMemo(
-    () => calendarEnabledAccounts(accounts, calendarIntegrationIds),
-    [accounts, calendarIntegrationIds],
+    () => calendarEnabledAccounts(accounts, calendarIntegrationIds, feedsByAccount),
+    [accounts, calendarIntegrationIds, feedsByAccount],
   );
 
   // The account the user is "in" (sidebar selection) when its calendar
@@ -58,8 +59,10 @@ export function CalendarView({ accounts, defaultAccountId }: CalendarViewProps) 
   // banner never flashes before the enabled set is known.
   const disabledCurrentAccount = useMemo(
     () =>
-      integrationLoaded ? calendarDisabledCurrentAccount(accounts, calendarIntegrationIds, defaultAccountId) : null,
-    [integrationLoaded, accounts, calendarIntegrationIds, defaultAccountId],
+      integrationLoaded
+        ? calendarDisabledCurrentAccount(accounts, calendarIntegrationIds, defaultAccountId, feedsByAccount)
+        : null,
+    [integrationLoaded, accounts, calendarIntegrationIds, defaultAccountId, feedsByAccount],
   );
 
   // Persisted account selection: load once, then resolve against the enabled

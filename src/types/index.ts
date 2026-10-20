@@ -114,11 +114,25 @@ export interface Calendar {
   accessRole: string;
   isVisible: boolean;
   sortOrder: number;
+  /** Host of the ICS feed behind this calendar (IMAP accounts), or null for a
+   *  provider-API calendar. Never the URL: that is a credential. */
+  feedHost: string | null;
   createdAt: number;
   updatedAt: number;
 }
 
-/** A calendar event synced from Gmail / Outlook. Mirrors the Rust
+/** A subscribed read-only ICS feed on an IMAP account (Proton Calendar
+ *  "share via link", or any published iCalendar URL). Mirrors the Rust
+ *  `CalendarFeed` struct; the URL itself stays in the secrets vault. */
+export interface CalendarFeed {
+  id: string;
+  accountId: string;
+  label: string;
+  host: string;
+  createdAt: number;
+}
+
+/** A calendar event synced from Gmail / Outlook or expanded from an ICS feed. Mirrors the Rust
  *  `CalendarEvent` struct in `src-tauri/src/models/mod.rs` (camelCase serde).
  *  `description` may contain raw provider HTML (Graph) — treat as UNTRUSTED
  *  and render as plain text only, never via dangerouslySetInnerHTML. */

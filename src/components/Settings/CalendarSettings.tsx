@@ -37,7 +37,8 @@ export function CalendarSettings() {
   const integrationIds = useCalendarIntegrationStore((s) => s.enabledIds);
   const integrationLoaded = useCalendarIntegrationStore((s) => s.isLoaded);
   const setIntegrationEnabled = useCalendarIntegrationStore((s) => s.setEnabled);
-  const capableAccounts = calendarCapableAccounts(accounts);
+  const feedsByAccount = useCalendarIntegrationStore((s) => s.feedsByAccount);
+  const capableAccounts = calendarCapableAccounts(accounts, feedsByAccount);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [showTitle, setShowTitle] = useState(false);
   const [leadMinutes, setLeadMinutes] = useState<number>(DEFAULT_LEAD_MINUTES);
