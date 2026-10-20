@@ -1,29 +1,21 @@
 import { open as openExternal } from '@tauri-apps/plugin-shell';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Select } from '@/components/shared/Select';
-import * as api from '@/lib/api';
-import { calendarColorMap, FALLBACK_CALENDAR_COLORS, hiddenCalendarIds, visibleEvents } from '@/lib/calendarColor';
+import { useCalendarAccount } from '@/hooks/useCalendarAccount';
+import { useCalendarData } from '@/hooks/useCalendarData';
 import { eventsAfterDelete } from '@/lib/calendarEvent';
 import { isReadOnlyCalendar, planCreateSlot } from '@/lib/calendarFeeds';
-import { addDays, monthGrid, resolveCalendarAccountId, startOfDay, weekDays } from '@/lib/calendarGrid';
-import { errorText, isAuthError } from '@/lib/errors';
-import {
-  calendarDisabledCurrentAccount,
-  calendarEnabledAccounts,
-  useCalendarIntegrationStore,
-} from '@/stores/calendarIntegrationStore';
+import { addDays, monthGrid, startOfDay, weekDays } from '@/lib/calendarGrid';
+import { errorText } from '@/lib/errors';
 import { useLogStore } from '@/stores/logStore';
-import type { Account, Calendar, CalendarEvent } from '@/types';
+import type { Account, CalendarEvent } from '@/types';
 import { EventDetailDialog } from './EventDetailDialog';
 import { MonthGrid } from './MonthGrid';
 import { NewEventDialog } from './NewEventDialog';
 import { TimeGrid } from './TimeGrid';
 
 type CalendarViewMode = 'month' | 'week' | 'day';
-
-/** Pref key for the calendar's own persisted account selection. */
-const ACCOUNT_PREF_KEY = 'calendar_selected_account';
 
 function toSec(d: Date): number {
   return Math.floor(d.getTime() / 1000);
@@ -44,92 +36,19 @@ export function CalendarView({ accounts, defaultAccountId }: CalendarViewProps) 
   const { t, i18n } = useTranslation(['calendar', 'common']);
   const addLog = useLogStore((s) => s.addLog);
 
-  // Only offer accounts whose calendar integration the user enabled in
-  // Settings → Calendar (an IMAP account counts once it has an ICS feed).
-  const calendarIntegrationIds = useCalendarIntegrationStore((s) => s.enabledIds);
-  const integrationLoaded = useCalendarIntegrationStore((s) => s.isLoaded);
-  const setIntegrationEnabled = useCalendarIntegrationStore((s) => s.setEnabled);
-  const feedsByAccount = useCalendarIntegrationStore((s) => s.feedsByAccount);
-  const calendarAccounts = useMemo(
-    () => calendarEnabledAccounts(accounts, calendarIntegrationIds, feedsByAccount),
-    [accounts, calendarIntegrationIds, feedsByAccount],
-  );
-
-  // The account the user is "in" (sidebar selection) when its calendar
-  // integration is switched off — instead of silently falling back to another
-  // account, offer to enable it right here. Gated on the pref load so the
-  // banner never flashes before the enabled set is known.
-  const disabledCurrentAccount = useMemo(
-    () =>
-      integrationLoaded
-        ? calendarDisabledCurrentAccount(accounts, calendarIntegrationIds, defaultAccountId, feedsByAccount)
-        : null,
-    [integrationLoaded, accounts, calendarIntegrationIds, defaultAccountId, feedsByAccount],
-  );
-
-  // Persisted account selection: load once, then resolve against the enabled
-  // account set (falling back to the effective account when the stored one is
-  // gone or disabled).
-  const [persistedAccountId, setPersistedAccountId] = useState<string | null>(null);
-  const [prefLoaded, setPrefLoaded] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .getPref(ACCOUNT_PREF_KEY)
-      .then((raw) => {
-        if (cancelled) return;
-        setPersistedAccountId(raw);
-        setPrefLoaded(true);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        addLog('error', 'system', `Failed to load calendar account pref: ${err}`);
-        setPrefLoaded(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [addLog]);
-
-  // The selector follows the account the user is "in": on open (and whenever
-  // the sidebar account changes to one with an enabled calendar) it overrides
-  // the persisted selection — a manual pick in the selector wins afterwards,
-  // until the sidebar account changes again. Gated on both loads so the
-  // override is never undone by the async pref read landing late.
-  const appliedDefaultRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!prefLoaded || !integrationLoaded || !defaultAccountId) return;
-    if (appliedDefaultRef.current === defaultAccountId) return;
-    if (!calendarAccounts.some((a) => a.id === defaultAccountId)) return;
-    appliedDefaultRef.current = defaultAccountId;
-    setPersistedAccountId(defaultAccountId);
-  }, [prefLoaded, integrationLoaded, defaultAccountId, calendarAccounts]);
-
-  const selectedAccountId = useMemo(
-    () => (prefLoaded ? resolveCalendarAccountId(calendarAccounts, persistedAccountId, defaultAccountId) : null),
-    [prefLoaded, calendarAccounts, persistedAccountId, defaultAccountId],
-  );
-
-  const handleSelectAccount = useCallback(
-    (id: string) => {
-      setPersistedAccountId(id);
-      api.setPref(ACCOUNT_PREF_KEY, id).catch((err) => {
-        addLog('error', 'system', `Failed to save calendar account pref: ${err}`);
-      });
-    },
-    [addLog],
-  );
+  const {
+    calendarAccounts,
+    disabledCurrentAccount,
+    selectedAccountId,
+    selectedAccount,
+    handleSelectAccount,
+    enableCurrentCalendar,
+    isEnabling,
+  } = useCalendarAccount(accounts, defaultAccountId);
 
   // View state
   const [viewMode, setViewMode] = useState<CalendarViewMode>('week');
   const [anchor, setAnchor] = useState<Date>(() => startOfDay(new Date()));
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [calendars, setCalendars] = useState<Calendar[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [needsReauth, setNeedsReauth] = useState(false);
-  const [isReauthing, setIsReauthing] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   /** Proposed slot for the "New event" dialog (double-clicked grid position). */
   const [createSlot, setCreateSlot] = useState<{ start: number; end: number } | null>(null);
@@ -148,172 +67,27 @@ export function CalendarView({ accounts, defaultAccountId }: CalendarViewProps) 
     return { rangeStart: toSec(dayStart), rangeEnd: toSec(addDays(dayStart, 1)) };
   }, [viewMode, anchor]);
 
-  // Load events for the visible range. Guarded against stale responses.
-  const fetchIdRef = useRef(0);
-  const loadEvents = useCallback(
-    async (accountId: string, start: number, end: number) => {
-      const fetchId = ++fetchIdRef.current;
-      setIsLoading(true);
-      try {
-        const result = await api.getCalendarEvents(accountId, start, end);
-        if (fetchIdRef.current !== fetchId) return;
-        setEvents(result);
-        setIsLoading(false);
-      } catch (e) {
-        if (fetchIdRef.current !== fetchId) return;
-        setIsLoading(false);
-        const msg = errorText(e);
-        setError(msg);
-        addLog('error', 'sync', `Failed to load calendar events: ${msg}`);
-      }
-    },
-    [addLog],
-  );
+  const {
+    setEvents,
+    calendars,
+    isLoading,
+    isSyncing,
+    error,
+    setError,
+    needsReauth,
+    setNeedsReauth,
+    isReauthing,
+    colorFor,
+    shownEvents,
+    toggleCalendar,
+    runSync,
+    runReauth,
+  } = useCalendarData(selectedAccountId, rangeStart, rangeEnd);
 
-  useEffect(() => {
-    if (!selectedAccountId) {
-      setEvents([]);
-      return;
-    }
-    void loadEvents(selectedAccountId, rangeStart, rangeEnd);
-  }, [selectedAccountId, rangeStart, rangeEnd, loadEvents]);
-
-  // The account's calendar registry: colours for the grids and the legend's
-  // show/hide toggles. Reloaded after each sync, which is what refreshes
-  // colours and picks up newly shared calendars.
-  const loadCalendars = useCallback(
-    async (accountId: string) => {
-      try {
-        setCalendars(await api.getCalendars(accountId));
-      } catch (e) {
-        // Non-fatal: without the registry every event falls back to a palette
-        // colour and nothing is hidden, so the calendar still renders.
-        addLog('error', 'sync', `Failed to load calendars: ${errorText(e)}`);
-      }
-    },
-    [addLog],
-  );
-
-  useEffect(() => {
-    if (!selectedAccountId) {
-      setCalendars([]);
-      return;
-    }
-    void loadCalendars(selectedAccountId);
-  }, [selectedAccountId, loadCalendars]);
-
-  const colorMap = useMemo(() => calendarColorMap(calendars), [calendars]);
-  const colorFor = useCallback(
-    (calendarId: string) => colorMap.get(calendarId) ?? FALLBACK_CALENDAR_COLORS[0],
-    [colorMap],
-  );
-  const hidden = useMemo(() => hiddenCalendarIds(calendars), [calendars]);
-  const shownEvents = useMemo(() => visibleEvents(events, hidden), [events, hidden]);
-
-  // Optimistic toggle: flip locally first so the grid re-filters instantly,
-  // then persist. On failure we reload the registry so the UI never keeps a
-  // toggle the DB rejected.
-  const toggleCalendar = useCallback(
-    async (calendar: Calendar) => {
-      if (!selectedAccountId) return;
-      const next = !calendar.isVisible;
-      setCalendars((current) =>
-        current.map((c) => (c.providerCalendarId === calendar.providerCalendarId ? { ...c, isVisible: next } : c)),
-      );
-      try {
-        await api.setCalendarVisible(selectedAccountId, calendar.providerCalendarId, next);
-      } catch (e) {
-        addLog('error', 'sync', `Failed to update calendar visibility: ${errorText(e)}`);
-        void loadCalendars(selectedAccountId);
-      }
-    },
-    [selectedAccountId, addLog, loadCalendars],
-  );
-
-  // Keep the latest range in a ref so a finishing sync reloads what's visible now.
-  const rangeRef = useRef({ rangeStart, rangeEnd });
-  rangeRef.current = { rangeStart, rangeEnd };
-
-  // Sync on view open / account switch, and via the manual Refresh button.
-  // Generation-guarded: a sync that finishes after a newer one started (e.g.
-  // the previous account's slow sync landing after an account switch) must not
-  // reload its events over the current account's, nor touch banner state.
-  const syncIdRef = useRef(0);
-  const runSync = useCallback(
-    async (accountId: string) => {
-      const syncId = ++syncIdRef.current;
-      setIsSyncing(true);
-      setError(null);
-      setNeedsReauth(false);
-      try {
-        const stored = await api.syncCalendarNow(accountId);
-        addLog('success', 'sync', `Calendar synced (${stored} events)`);
-        if (syncIdRef.current !== syncId) return;
-        const { rangeStart: start, rangeEnd: end } = rangeRef.current;
-        await loadEvents(accountId, start, end);
-        await loadCalendars(accountId);
-      } catch (e) {
-        const msg = errorText(e);
-        addLog('error', 'sync', `Calendar sync failed: ${msg}`);
-        if (syncIdRef.current !== syncId) return;
-        // Auth-class failures get the friendly banner + inline re-auth button;
-        // the raw provider message only goes to the output panel.
-        if (isAuthError(e, msg)) {
-          setNeedsReauth(true);
-        } else {
-          setError(msg);
-        }
-      } finally {
-        if (syncIdRef.current === syncId) setIsSyncing(false);
-      }
-    },
-    [addLog, loadEvents, loadCalendars],
-  );
-
-  // Inline re-auth from the banner: run the OAuth flow for the selected
-  // account, then sync again so granted access is visible immediately.
-  const runReauth = useCallback(async () => {
-    if (!selectedAccountId) return;
-    setIsReauthing(true);
-    try {
-      await api.reauthenticateAccount(selectedAccountId);
-      addLog('success', 'account', 'Account re-authenticated');
-      setNeedsReauth(false);
-      await runSync(selectedAccountId);
-    } catch (e) {
-      const msg = errorText(e);
-      setError(msg);
-      addLog('error', 'account', `Re-authentication failed: ${msg}`);
-    } finally {
-      setIsReauthing(false);
-    }
-  }, [selectedAccountId, addLog, runSync]);
-
-  useEffect(() => {
-    if (!selectedAccountId) return;
-    void runSync(selectedAccountId);
-  }, [selectedAccountId, runSync]);
-
-  // Inline enable from the banner: flip the integration pref back on, then
-  // select the account — the selection effect above triggers the first sync
-  // (auth failures land in the existing re-auth banner).
-  const [isEnabling, setIsEnabling] = useState(false);
-  const enableCurrentCalendar = useCallback(async () => {
-    if (!disabledCurrentAccount) return;
-    setIsEnabling(true);
+  const enableCalendar = useCallback(() => {
     setError(null);
-    try {
-      await setIntegrationEnabled(disabledCurrentAccount.id, true);
-      addLog('info', 'sync', `Calendar integration enabled for ${disabledCurrentAccount.email} — syncing…`);
-      handleSelectAccount(disabledCurrentAccount.id);
-    } catch (e) {
-      const msg = errorText(e);
-      setError(msg);
-      addLog('error', 'system', `Failed to enable calendar integration: ${msg}`);
-    } finally {
-      setIsEnabling(false);
-    }
-  }, [disabledCurrentAccount, setIntegrationEnabled, handleSelectAccount, addLog]);
+    enableCurrentCalendar().catch((e) => setError(errorText(e)));
+  }, [enableCurrentCalendar, setError]);
 
   // Navigation
   const goToday = useCallback(() => setAnchor(startOfDay(new Date())), []);
@@ -370,11 +144,6 @@ export function CalendarView({ accounts, defaultAccountId }: CalendarViewProps) 
     [calendars, addLog, t],
   );
 
-  const selectedAccount = useMemo(
-    () => calendarAccounts.find((a) => a.id === selectedAccountId) ?? null,
-    [calendarAccounts, selectedAccountId],
-  );
-
   // Frosted full-view overlay for the account the user is "in" when its
   // calendar integration is off: the calendar behind renders but is blurred
   // and non-interactive ("frozen"), with the enable card centered both ways
@@ -387,7 +156,7 @@ export function CalendarView({ accounts, defaultAccountId }: CalendarViewProps) 
           {t('calendar:integrationDisabled', { email: disabledCurrentAccount.email })}
         </p>
         <button
-          onClick={() => void enableCurrentCalendar()}
+          onClick={enableCalendar}
           disabled={isEnabling}
           className="px-4 py-1.5 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-60"
         >
