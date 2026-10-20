@@ -9,7 +9,8 @@ the chat can list events.
 
 ## Sub-features
 
-- `calendar.panel` right-docked day agenda for the account the user is in; the collapsed dock's rail shows a calendar button directly below the chat button; "Open full calendar" switches to the grid.
+- `calendar.panel` right-docked day agenda for the account the user is in, drawn as the hour-by-hour `TimeGrid` of a single day (click opens the event, double-click on a free slot creates one); the collapsed dock's rail shows a calendar button directly below the chat button; "Open full calendar" switches to the week/month grid.
+- `calendar.meet` meeting links are detected for Google Meet, Teams, Zoom, Webex, GoToMeeting, Jitsi and Proton Meet (`meet.proton.me`, also from Proton's `X-PM-CONFERENCE-URL` feed property): the event dialog and the reminder show a Join button.
 - `calendar.view` month / week grid, several calendars per account.
 - `calendar.feeds` Settings → Calendar → Calendar feeds: an IMAP account subscribes to an ICS URL (kept in the keychain, never shown back); the feed becomes a read-only calendar with its recurrences expanded locally. An IMAP account without a feed gets a setup prompt in the panel. On a Proton feed, double-clicking an empty slot opens Proton Calendar's create-event page for that day in the browser.
 - `calendar.invite` an email with a calendar part shows the invite card; detection is structural (the `.ics` part), not the presence of a meeting link.

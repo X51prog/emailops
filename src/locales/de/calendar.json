@@ -110,7 +110,6 @@
     "open": "Kalenderbereich öffnen",
     "close": "Kalenderbereich schließen",
     "openFull": "Vollständigen Kalender öffnen",
-    "noEvents": "An diesem Tag ist nichts geplant.",
     "setupTitle": "Für dieses Konto gibt es noch keinen Kalender",
     "setupBody": "IMAP-Konten zeigen einen Kalender, sobald du in Einstellungen → Kalender einen Kalender-Feed abonnierst (bei Proton Calendar den Link zum Teilen).",
     "setupButton": "In den Einstellungen einrichten",

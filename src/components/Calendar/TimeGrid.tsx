@@ -122,7 +122,7 @@ export function TimeGrid({ days, events, colorFor, onSelectEvent, onCreateSlot }
   };
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
+    <div data-testid="time-grid" className="flex flex-col flex-1 min-h-0">
       {/* Day headers, multi-day band, all-day row */}
       <div className="border-b border-gray-200 flex-shrink-0">
         {/* Day labels */}

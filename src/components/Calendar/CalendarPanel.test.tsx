@@ -130,19 +130,23 @@ describe('CalendarPanel', () => {
     expect(api.getCalendarEvents).not.toHaveBeenCalled();
   });
 
-  it("lists today's events of the current account in time order", async () => {
+  it("shows today's events of the current account on an hour-by-hour grid", async () => {
     vi.mocked(api.getCalendarEvents).mockResolvedValue([makeEvent('e2', 'Lunch', 13), makeEvent('e1', 'Standup', 9)]);
     await mount('g');
-    const titles = [...container.querySelectorAll('[data-testid="agenda-item"]')].map(
-      (n) => n.querySelector('[data-testid="agenda-title"]')?.textContent,
-    );
-    expect(titles).toEqual(['Standup', 'Lunch']);
+    // The day is a time grid (like Gmail's side panel), not a flat list: an
+    // hour gutter plus one positioned block per event.
+    expect(container.querySelector('[data-testid="calendar-panel"] [data-testid="time-grid"]')).not.toBeNull();
+    const blocks = [...container.querySelectorAll('button[title]')]
+      .map((b) => b.getAttribute('title') ?? '')
+      .filter((t) => /^(Standup|Lunch) ·/.test(t));
+    expect(blocks).toHaveLength(2);
     expect(api.syncCalendarNow).toHaveBeenCalledWith('g');
   });
 
-  it('shows the empty-day text and opens the full calendar from its header button', async () => {
+  it('shows an empty grid for a quiet day and opens the full calendar from its header button', async () => {
     await mount('i-feed');
-    expect(container.textContent).toContain('calendar:panel.noEvents');
+    expect(container.querySelector('[data-testid="time-grid"]')).not.toBeNull();
+    expect(container.querySelector('button[title*=" · "]')).toBeNull();
     const expand = container.querySelector<HTMLButtonElement>('button[aria-label="calendar:panel.openFull"]');
     expect(expand).not.toBeNull();
     await act(async () => expand?.click());

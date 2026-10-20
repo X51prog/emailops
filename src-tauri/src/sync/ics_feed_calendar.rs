@@ -447,8 +447,12 @@ fn event_body(event: &RawVEvent, default_tz: Option<&str>) -> Option<EventBody> 
                 response: attendee_response(&p.params),
             })
             .collect(),
+        // Proton Calendar publishes its video-conference link (Proton Meet,
+        // Zoom) in its own property; it is the authoritative join URL, ahead
+        // of a plain URL property.
         urls: event
-            .all("URL")
+            .all("X-PM-CONFERENCE-URL")
+            .chain(event.all("URL"))
             .map(|p| p.value.trim().to_string())
             .filter(|u| u.starts_with("https://"))
             .collect(),
@@ -703,6 +707,24 @@ mod tests {
         assert_eq!(e.status, "tentative");
         assert_eq!(e.recurring_event_id, None);
         assert_eq!(e.html_link, None);
+    }
+
+    #[test]
+    fn proton_conference_property_is_a_structured_meeting_url_ahead_of_url() {
+        // Proton Calendar publishes the Meet link in its own property; it must
+        // reach the meeting-link extractor as a structured (authoritative) URL.
+        let out = expand(
+            &["UID:p@x\nDTSTART:20260729T070000Z\nDTEND:20260729T080000Z\nSUMMARY:Sync\nX-PM-CONFERENCE-URL:https://meet.proton.me/id-AAA1A8A1A0#pwd-DDDDDDDDDDDD\nURL:https://example.com/agenda"],
+            utc(2026, 7, 1, 0, 0),
+            utc(2026, 8, 1, 0, 0),
+        );
+        assert_eq!(
+            out[0].structured_meeting_urls,
+            vec![
+                "https://meet.proton.me/id-AAA1A8A1A0#pwd-DDDDDDDDDDDD".to_string(),
+                "https://example.com/agenda".to_string()
+            ]
+        );
     }
 
     #[test]

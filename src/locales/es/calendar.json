@@ -110,7 +110,6 @@
     "open": "Abrir el panel de calendario",
     "close": "Cerrar el panel de calendario",
     "openFull": "Abrir calendario completo",
-    "noEvents": "No hay nada programado este día.",
     "setupTitle": "Esta cuenta aún no tiene calendario",
     "setupBody": "Las cuentas IMAP muestran un calendario cuando te suscribes a un feed de calendario (en Proton Calendar, su enlace de compartir) en Ajustes → Calendario.",
     "setupButton": "Configurar en Ajustes",

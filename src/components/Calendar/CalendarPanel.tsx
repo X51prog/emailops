@@ -1,16 +1,19 @@
+import { open as openExternal } from '@tauri-apps/plugin-shell';
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Select } from '@/components/shared/Select';
 import { useCalendarAccount } from '@/hooks/useCalendarAccount';
 import { useCalendarData } from '@/hooks/useCalendarData';
-import { useFormatters } from '@/hooks/useFormatters';
 import { eventsAfterDelete } from '@/lib/calendarEvent';
-import { isReadOnlyCalendar } from '@/lib/calendarFeeds';
-import { addDays, eventsForDay, startOfDay } from '@/lib/calendarGrid';
+import { isReadOnlyCalendar, planCreateSlot } from '@/lib/calendarFeeds';
+import { addDays, startOfDay } from '@/lib/calendarGrid';
 import { errorText } from '@/lib/errors';
 import { calendarPanelState, useCalendarIntegrationStore } from '@/stores/calendarIntegrationStore';
+import { useLogStore } from '@/stores/logStore';
 import type { Account, CalendarEvent } from '@/types';
 import { EventDetailDialog } from './EventDetailDialog';
+import { NewEventDialog } from './NewEventDialog';
+import { TimeGrid } from './TimeGrid';
 
 interface CalendarPanelProps {
   accounts: Account[];
@@ -29,10 +32,11 @@ function toSec(d: Date): number {
 
 /**
  * Right-docked day agenda — the calendar's default surface, like the side
- * panel in Gmail. Shows one day of the account the user is in, with the
- * account picker when several have a calendar; for an IMAP account without a
- * feed it explains how to get one, and for an account whose integration is
- * switched off it offers to enable it.
+ * panel in Gmail: one day of the account the user is in on an hour-by-hour
+ * grid (the same `TimeGrid` as the day view, so clicks and double-clicks
+ * behave the same), with the account picker when several have a calendar;
+ * for an IMAP account without a feed it explains how to get one, and for an
+ * account whose integration is switched off it offers to enable it.
  */
 export function CalendarPanel({
   accounts,
@@ -42,7 +46,7 @@ export function CalendarPanel({
   onOpenSettings,
 }: CalendarPanelProps) {
   const { t, i18n } = useTranslation(['calendar', 'common']);
-  const { time } = useFormatters();
+  const addLog = useLogStore((s) => s.addLog);
   const enabledIds = useCalendarIntegrationStore((s) => s.enabledIds);
   const feedsByAccount = useCalendarIntegrationStore((s) => s.feedsByAccount);
 
@@ -56,6 +60,7 @@ export function CalendarPanel({
     calendarAccounts,
     disabledCurrentAccount,
     selectedAccountId,
+    selectedAccount,
     handleSelectAccount,
     enableCurrentCalendar,
     isEnabling,
@@ -68,13 +73,32 @@ export function CalendarPanel({
   const activeAccountId = panelState === 'setup' ? null : selectedAccountId;
   const data = useCalendarData(activeAccountId, rangeStart, rangeEnd);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  /** Proposed slot for the "New event" dialog (double-clicked grid position). */
+  const [createSlot, setCreateSlot] = useState<{ start: number; end: number } | null>(null);
+
+  // Same rule as the full view: in-app dialog for a writable calendar, a
+  // hand-over to Proton Calendar for Proton feeds, nothing otherwise.
+  const openCreateSlot = useCallback(
+    (start: number, end: number) => {
+      const plan = planCreateSlot(data.calendars, start);
+      if (plan.kind === 'dialog') {
+        setCreateSlot({ start, end });
+      } else if (plan.kind === 'proton') {
+        addLog('info', 'system', t('calendar:createInProton'));
+        openExternal(plan.url).catch((err) => {
+          addLog('error', 'system', `Failed to open Proton Calendar: ${err}`);
+        });
+      }
+    },
+    [data.calendars, addLog, t],
+  );
 
   const dayLabel = useMemo(
     () =>
       new Intl.DateTimeFormat(i18n.language || 'en', { weekday: 'long', day: 'numeric', month: 'long' }).format(anchor),
     [anchor, i18n.language],
   );
-  const dayEvents = useMemo(() => eventsForDay(data.shownEvents, anchor), [data.shownEvents, anchor]);
+  const days = useMemo(() => [anchor], [anchor]);
 
   const enable = useCallback(() => {
     enableCurrentCalendar().catch((e) => data.setError(errorText(e)));
@@ -211,40 +235,13 @@ export function CalendarPanel({
             </div>
           )}
 
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {dayEvents.length === 0 ? (
-              <p className="px-4 py-6 text-center text-xs text-gray-500">
-                {data.isLoading || data.isSyncing ? t('calendar:refreshing') : t('calendar:panel.noEvents')}
-              </p>
-            ) : (
-              <ul className="divide-y divide-gray-100">
-                {dayEvents.map((event) => (
-                  <li key={event.id}>
-                    <button
-                      type="button"
-                      data-testid="agenda-item"
-                      onClick={() => setSelectedEvent(event)}
-                      className="flex w-full items-start gap-2.5 px-3 py-2 text-left hover:bg-gray-50"
-                    >
-                      <span
-                        className="mt-1.5 h-2.5 w-2.5 flex-shrink-0 rounded-full"
-                        style={{ backgroundColor: data.colorFor(event.calendarId) }}
-                      />
-                      <span className="min-w-0 flex-1">
-                        <span data-testid="agenda-title" className="block truncate text-sm text-gray-900">
-                          {event.title || t('calendar:detail.tentative')}
-                        </span>
-                        <span className="block text-xs text-gray-500">
-                          {event.isAllDay ? t('calendar:allDay') : `${time(event.startTime)} – ${time(event.endTime)}`}
-                          {event.location ? ` · ${event.location}` : ''}
-                        </span>
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+          <TimeGrid
+            days={days}
+            events={data.shownEvents}
+            colorFor={data.colorFor}
+            onSelectEvent={setSelectedEvent}
+            onCreateSlot={openCreateSlot}
+          />
         </>
       )}
 
@@ -263,6 +260,28 @@ export function CalendarPanel({
           }}
           onAuthError={() => {
             setSelectedEvent(null);
+            data.setNeedsReauth(true);
+          }}
+        />
+      )}
+
+      {createSlot && selectedAccountId && (
+        <NewEventDialog
+          accountId={selectedAccountId}
+          isGmail={selectedAccount?.provider === 'gmail'}
+          initialStart={createSlot.start}
+          initialEnd={createSlot.end}
+          onClose={() => setCreateSlot(null)}
+          onCreated={(created, recurrence) => {
+            setCreateSlot(null);
+            if (recurrence !== 'none') {
+              void data.runSync(selectedAccountId);
+            } else {
+              data.setEvents((prev) => [...prev.filter((e) => e.id !== created.id), created]);
+            }
+          }}
+          onAuthError={() => {
+            setCreateSlot(null);
             data.setNeedsReauth(true);
           }}
         />
