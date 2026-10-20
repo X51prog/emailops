@@ -265,8 +265,28 @@ pub struct Calendar {
     pub access_role: String,
     pub is_visible: bool,
     pub sort_order: i64,
+    /// Host of the ICS feed behind this calendar (`calendar_feeds.host`);
+    /// `None` for provider-API calendars. Lets the UI offer feed-specific
+    /// affordances without ever seeing the feed URL.
+    pub feed_host: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
+}
+
+/// A subscribed read-only ICS feed (Proton Calendar "share via link", or any
+/// published iCalendar URL) attached to an account whose provider has no
+/// calendar API. The URL itself is a credential and lives in the secrets
+/// vault keyed by `id` — see `migrations/V039__calendar_feeds.sql`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(TS), ts(export, export_to = "../src/types/generated/"))]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarFeed {
+    pub id: String,
+    pub account_id: String,
+    pub label: String,
+    /// Feed URL host, for display and provider detection (not sensitive).
+    pub host: String,
+    pub created_at: i64,
 }
 
 /// One calendar event instance synced from the provider. Recurring events are
