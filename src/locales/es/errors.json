@@ -49,6 +49,7 @@
     "needs_reauth": "Se requiere autenticación: inicia sesión de nuevo.",
     "calendar_permission_denied": "Esta cuenta no ha concedido permiso de calendario: inicia sesión de nuevo y permite el acceso al calendario.",
     "not_found": "No encontrado: {{detail}}",
+    "read_only_calendar": "Este calendario es una suscripción de solo lectura: cambia el evento donde está publicado",
     "invalid_input": "Entrada no válida: {{detail}}",
     "ai": "Error de IA: {{detail}}",
     "ai_disabled": "La IA está desactivada. Actívala en Ajustes.",

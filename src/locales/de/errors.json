@@ -49,6 +49,7 @@
     "needs_reauth": "Authentifizierung erforderlich — melde dich erneut an.",
     "calendar_permission_denied": "Dieses Konto hat keine Kalender-Berechtigung erteilt — melde dich erneut an und erlaube den Kalenderzugriff.",
     "not_found": "Nicht gefunden: {{detail}}",
+    "read_only_calendar": "Dieser Kalender ist ein schreibgeschütztes Abonnement – ändere den Termin dort, wo er veröffentlicht ist",
     "invalid_input": "Ungültige Eingabe: {{detail}}",
     "ai": "KI-Fehler: {{detail}}",
     "ai_disabled": "Die KI ist deaktiviert. Aktiviere sie in den Einstellungen.",

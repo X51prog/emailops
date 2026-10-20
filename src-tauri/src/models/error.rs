@@ -48,6 +48,11 @@ pub enum AppError {
     #[error("Not found: {0}")]
     NotFound(String),
 
+    /// The calendar is a subscribed ICS feed (read-only by nature): events can
+    /// only be changed where the feed is published.
+    #[error("This calendar is a read-only subscription — change the event where it is published")]
+    ReadOnlyCalendar,
+
     #[error("Invalid input: {0}")]
     InvalidInput(String),
 
@@ -125,6 +130,7 @@ impl AppError {
             AppError::NeedsReauth { .. } => "needs_reauth",
             AppError::CalendarPermissionDenied { .. } => "calendar_permission_denied",
             AppError::NotFound(_) => "not_found",
+            AppError::ReadOnlyCalendar => "read_only_calendar",
             AppError::InvalidInput(_) => "invalid_input",
             AppError::AiError(_) => "ai",
             AppError::AiDisabled => "ai_disabled",
@@ -175,6 +181,7 @@ impl AppError {
                 p.insert("model", model.clone());
             }
             AppError::AiDisabled
+            | AppError::ReadOnlyCalendar
             | AppError::Cancelled
             | AppError::NoArchiveFolder
             | AppError::NoSpamFolder
