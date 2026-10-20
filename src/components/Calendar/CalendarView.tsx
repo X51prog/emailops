@@ -1,9 +1,11 @@
+import { open as openExternal } from '@tauri-apps/plugin-shell';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Select } from '@/components/shared/Select';
 import * as api from '@/lib/api';
 import { calendarColorMap, FALLBACK_CALENDAR_COLORS, hiddenCalendarIds, visibleEvents } from '@/lib/calendarColor';
 import { eventsAfterDelete } from '@/lib/calendarEvent';
+import { isReadOnlyCalendar, planCreateSlot } from '@/lib/calendarFeeds';
 import { addDays, monthGrid, resolveCalendarAccountId, startOfDay, weekDays } from '@/lib/calendarGrid';
 import { errorText, isAuthError } from '@/lib/errors';
 import {
@@ -349,9 +351,24 @@ export function CalendarView({ accounts, defaultAccountId }: CalendarViewProps) 
 
   const days = useMemo(() => (viewMode === 'week' ? weekDays(anchor) : [startOfDay(anchor)]), [viewMode, anchor]);
 
-  const openCreateSlot = useCallback((start: number, end: number) => {
-    setCreateSlot({ start, end });
-  }, []);
+  // A double-click on an empty slot: the in-app dialog when the account has a
+  // writable calendar; for an account whose calendars are Proton feeds (read
+  // only — Proton has no write API), hand the day over to Proton Calendar's
+  // own create form in the browser; nothing for other read-only feeds.
+  const openCreateSlot = useCallback(
+    (start: number, end: number) => {
+      const plan = planCreateSlot(calendars, start);
+      if (plan.kind === 'dialog') {
+        setCreateSlot({ start, end });
+      } else if (plan.kind === 'proton') {
+        addLog('info', 'system', t('calendar:createInProton'));
+        openExternal(plan.url).catch((err) => {
+          addLog('error', 'system', `Failed to open Proton Calendar: ${err}`);
+        });
+      }
+    },
+    [calendars, addLog, t],
+  );
 
   const selectedAccount = useMemo(
     () => calendarAccounts.find((a) => a.id === selectedAccountId) ?? null,
@@ -587,6 +604,7 @@ export function CalendarView({ accounts, defaultAccountId }: CalendarViewProps) 
           event={selectedEvent}
           accountId={selectedEvent.accountId}
           provider={selectedAccount?.provider ?? ''}
+          readOnly={calendars.some((c) => c.providerCalendarId === selectedEvent.calendarId && isReadOnlyCalendar(c))}
           onClose={() => setSelectedEvent(null)}
           onDeleted={(eventId, scope, recurringEventId, startTime) => {
             // Provider round-trip already happened — drop the affected

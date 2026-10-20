@@ -103,5 +103,6 @@
   "calendars": {
     "hideOne": "Hide {{name}}",
     "showOne": "Show {{name}}"
-  }
+  },
+  "createInProton": "Opening Proton Calendar to create the event — pick the time and calendar there (the shared feed is read-only; changes show up here within a few hours)."
 }

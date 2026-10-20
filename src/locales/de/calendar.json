@@ -103,5 +103,6 @@
   "calendars": {
     "hideOne": "{{name}} ausblenden",
     "showOne": "{{name}} einblenden"
-  }
+  },
+  "createInProton": "Proton Calendar wird geöffnet, um den Termin anzulegen – wähle dort Uhrzeit und Kalender (der geteilte Feed ist schreibgeschützt; Änderungen erscheinen hier innerhalb weniger Stunden)."
 }
