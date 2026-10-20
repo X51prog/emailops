@@ -60,7 +60,7 @@ pub async fn create_calendar_event(
         .ok_or_else(|| AppError::NotFound(format!("account '{account_id}' not found")))?;
     let recurrence = crate::sync::calendar_provider::EventRecurrence::from_wire(&recurrence)
         .ok_or_else(|| AppError::InvalidInput(format!("unknown recurrence '{recurrence}'")))?;
-    let provider = crate::services::calendar::sync::build_calendar_provider(&account.id, &account.provider)?;
+    let provider = crate::services::calendar::sync::build_calendar_provider(&state.db, &account)?;
     let input = crate::sync::calendar_provider::NewCalendarEvent {
         title,
         description,
@@ -107,7 +107,7 @@ pub async fn delete_calendar_event(
     let scope_wire = scope.unwrap_or_else(|| "instance".to_string());
     let scope = crate::services::calendar::delete::DeleteScope::from_wire(&scope_wire)
         .ok_or_else(|| AppError::InvalidInput(format!("unknown delete scope '{scope_wire}'")))?;
-    let provider = crate::services::calendar::sync::build_calendar_provider(&account.id, &account.provider)?;
+    let provider = crate::services::calendar::sync::build_calendar_provider(&state.db, &account)?;
     crate::services::calendar::delete::delete_calendar_event(
         &state.db,
         &account.id,
@@ -149,7 +149,7 @@ pub async fn rsvp_calendar_invite(
         .ok_or_else(|| AppError::NotFound(format!("account '{account_id}' not found")))?;
     let rsvp = crate::sync::calendar_provider::RsvpResponse::from_wire(&response)
         .ok_or_else(|| AppError::InvalidInput(format!("unknown RSVP response '{response}'")))?;
-    let provider = crate::services::calendar::sync::build_calendar_provider(&account.id, &account.provider)?;
+    let provider = crate::services::calendar::sync::build_calendar_provider(&state.db, &account)?;
     provider.rsvp_by_ical_uid(&ical_uid, rsvp, &account.email).await
 }
 
@@ -162,7 +162,7 @@ pub async fn sync_calendar_now(state: State<'_, AppState>, account_id: String) -
         .db
         .get_account(&account_id)?
         .ok_or_else(|| AppError::NotFound(format!("account '{account_id}' not found")))?;
-    let provider = crate::services::calendar::sync::build_calendar_provider(&account.id, &account.provider)?;
+    let provider = crate::services::calendar::sync::build_calendar_provider(&state.db, &account)?;
     crate::services::calendar::sync::sync_account_calendar(
         &state.db,
         &account.id,

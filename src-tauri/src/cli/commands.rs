@@ -381,7 +381,7 @@ pub async fn dispatch(session: &mut CliSession, command: Command) -> Result<()> 
                     .db
                     .get_account(&account)?
                     .ok_or_else(|| AppError::NotFound(format!("account '{account}' not found")))?;
-                let provider = crate::services::calendar::sync::build_calendar_provider(&acct.id, &acct.provider)?;
+                let provider = crate::services::calendar::sync::build_calendar_provider(&session.db, &acct)?;
                 let count = crate::services::calendar::sync::sync_account_calendar(
                     &session.db,
                     &acct.id,

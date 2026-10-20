@@ -4568,11 +4568,7 @@ async fn run_chat_turn_inner(
         .get_account(&account_id)
         .ok()
         .flatten()
-        .map(|a| {
-            crate::sync::calendar_provider::provider_supports_calendar(&a.provider)
-                && db.calendar_enabled(&a.id).unwrap_or(false)
-        })
-        .unwrap_or(false);
+        .is_some_and(|a| crate::services::calendar::capability::calendar_available(&db, &a));
     // Research mode plans and gathers on its own (`research::prepare`, or the
     // estimate the user confirmed); a shortcut or the turn's planner would
     // answer from one page and skip the reading it was asked to do. The
