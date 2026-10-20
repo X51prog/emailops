@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import * as api from '@/lib/api';
 import { resolveCalendarAccountId } from '@/lib/calendarGrid';
 import { errorText } from '@/lib/errors';
@@ -12,6 +12,19 @@ import type { Account } from '@/types';
 
 /** Pref key for the calendar's own persisted account selection. */
 const ACCOUNT_PREF_KEY = 'calendar_selected_account';
+
+/**
+ * The sidebar account the calendar last snapped to. Module-level on purpose:
+ * the docked agenda and the full view are separate mounts of this hook, and
+ * a manual pick in one must survive opening the other — only a *change* of
+ * the sidebar account snaps the selection again.
+ */
+let appliedDefaultAccountId: string | null = null;
+
+/** Test seam: forget the last applied sidebar account between tests. */
+export function resetCalendarAccountDefaultForTests(): void {
+  appliedDefaultAccountId = null;
+}
 
 /**
  * Which account the calendar surfaces (full view, day-agenda panel) show.
@@ -71,12 +84,11 @@ export function useCalendarAccount(accounts: Account[], defaultAccountId: string
 
   // Gated on both loads so the override is never undone by the async pref
   // read landing late.
-  const appliedDefaultRef = useRef<string | null>(null);
   useEffect(() => {
     if (!prefLoaded || !integrationLoaded || !defaultAccountId) return;
-    if (appliedDefaultRef.current === defaultAccountId) return;
+    if (appliedDefaultAccountId === defaultAccountId) return;
     if (!calendarAccounts.some((a) => a.id === defaultAccountId)) return;
-    appliedDefaultRef.current = defaultAccountId;
+    appliedDefaultAccountId = defaultAccountId;
     setPersistedAccountId(defaultAccountId);
   }, [prefLoaded, integrationLoaded, defaultAccountId, calendarAccounts]);
 

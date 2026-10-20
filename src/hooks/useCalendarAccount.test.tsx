@@ -1,0 +1,91 @@
+// The calendar's account selection follows the sidebar account when a surface
+// opens, but a manual pick in the selector must survive moving between the
+// docked agenda and the full view (two mounts of the same hook) until the
+// sidebar account changes again.
+
+import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const prefs = vi.hoisted(() => ({ stored: {} as Record<string, string> }));
+vi.mock('@/lib/api', () => ({
+  getPref: vi.fn(async (key: string) => prefs.stored[key] ?? null),
+  setPref: vi.fn(async (key: string, value: string) => {
+    prefs.stored[key] = value;
+  }),
+  currentPlatform: vi.fn(() => ''),
+}));
+
+import { useCalendarIntegrationStore } from '@/stores/calendarIntegrationStore';
+import type { Account } from '@/types';
+import { resetCalendarAccountDefaultForTests, useCalendarAccount } from './useCalendarAccount';
+
+function makeAccount(id: string): Account {
+  return {
+    id,
+    provider: 'gmail',
+    email: `${id}@example.com`,
+    name: id,
+    createdAt: 0,
+    sortOrder: 0,
+    enabled: true,
+    syncFromTimestamp: null,
+  } as Account;
+}
+
+const accounts = [makeAccount('g1'), makeAccount('g2'), makeAccount('g3')];
+
+let latest: ReturnType<typeof useCalendarAccount> | null = null;
+function Probe({ defaultAccountId }: { defaultAccountId: string | null }) {
+  latest = useCalendarAccount(accounts, defaultAccountId);
+  return <span>{latest.selectedAccountId ?? ''}</span>;
+}
+
+describe('useCalendarAccount', () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    prefs.stored = {};
+    resetCalendarAccountDefaultForTests();
+    useCalendarIntegrationStore.setState({
+      isLoaded: true,
+      enabledIds: new Set(['g1', 'g2', 'g3']),
+      feedsByAccount: {},
+    });
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it('opens on the sidebar account', async () => {
+    await act(async () => root.render(<Probe defaultAccountId="g1" />));
+    expect(container.textContent).toBe('g1');
+  });
+
+  it('keeps a manual pick across a remount with the same sidebar account', async () => {
+    await act(async () => root.render(<Probe defaultAccountId="g1" />));
+    await act(async () => latest?.handleSelectAccount('g2'));
+    expect(container.textContent).toBe('g2');
+
+    // The panel closes and the full view opens: a fresh mount of the hook.
+    act(() => root.unmount());
+    root = createRoot(container);
+    await act(async () => root.render(<Probe defaultAccountId="g1" />));
+
+    expect(container.textContent).toBe('g2');
+  });
+
+  it('follows the sidebar account again once it changes', async () => {
+    await act(async () => root.render(<Probe defaultAccountId="g1" />));
+    await act(async () => latest?.handleSelectAccount('g2'));
+    await act(async () => root.render(<Probe defaultAccountId="g3" />));
+    expect(container.textContent).toBe('g3');
+  });
+});
