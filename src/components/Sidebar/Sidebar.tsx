@@ -103,9 +103,13 @@ interface SidebarProps {
   skillsEnabled: boolean;
   /** Experimental shared-documents switch (Settings → Shared documents). */
   sharedDocsEnabled: boolean;
-  /** True when at least one account has calendar integration enabled
-   *  (Settings → Calendar) — the Calendar entry is hidden otherwise. */
-  calendarEnabled: boolean;
+  /** Show the Calendar entry (any enabled account: an IMAP account without a
+   *  feed gets the panel's setup prompt). */
+  calendarEntry: boolean;
+  /** The calendar is on screen — docked panel or full view. */
+  calendarActive: boolean;
+  /** Opens the right-docked calendar agenda (the calendar's default surface). */
+  onOpenCalendarPanel: () => void;
   onSelectLens: (lensId: string) => void;
 }
 
@@ -144,7 +148,9 @@ export function Sidebar({
   lensesEnabled,
   skillsEnabled,
   sharedDocsEnabled,
-  calendarEnabled,
+  calendarEntry,
+  calendarActive,
+  onOpenCalendarPanel,
   onSelectLens,
 }: SidebarProps) {
   const { counts } = useMemoryStore();
@@ -633,12 +639,15 @@ export function Sidebar({
                   </button>
                 </li>
               )}
-              {calendarEnabled && (
+              {calendarEntry && (
                 <li>
+                  {/* Opens the docked day agenda; the full grid is one click
+                      further from the panel's header. */}
                   <button
-                    onClick={() => onSetViewMode('calendar')}
+                    onClick={onOpenCalendarPanel}
+                    aria-pressed={calendarActive}
                     className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center gap-2 ${
-                      viewMode === 'calendar' ? 'bg-primary-50 text-primary-700' : 'text-gray-700 hover:bg-gray-100'
+                      calendarActive ? 'bg-primary-50 text-primary-700' : 'text-gray-700 hover:bg-gray-100'
                     }`}
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

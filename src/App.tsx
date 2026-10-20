@@ -8,10 +8,10 @@ import { AttachmentToolbar } from '@/components/Attachments/AttachmentToolbar';
 import { AttachmentViewer } from '@/components/Attachments/AttachmentViewer';
 import type { RuleFormPrefill } from '@/components/Attachments/RuleManagementModal';
 import { RuleManagementModal } from '@/components/Attachments/RuleManagementModal';
+import { CalendarPanel } from '@/components/Calendar/CalendarPanel';
 import { CalendarView } from '@/components/Calendar/CalendarView';
 import { MeetingReminderBanner } from '@/components/Calendar/MeetingReminderBanner';
-import { ChatPanelDock } from '@/components/Chat/ChatPanelDock';
-import { ChatPanelRail } from '@/components/Chat/ChatPanelRail';
+import { ChatPanel } from '@/components/Chat/ChatPanel';
 import { ChatView } from '@/components/Chat/ChatView';
 import { ResearchExitDialog } from '@/components/Chat/ResearchExitDialog';
 import { ComposeModal } from '@/components/ComposeModal';
@@ -32,6 +32,8 @@ import { LogPanel } from '@/components/LogPanel/LogPanel';
 import { MemoryView } from '@/components/Memory/MemoryView';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { OnboardingWizard } from '@/components/Onboarding/OnboardingWizard';
+import { RightDock } from '@/components/RightDock/RightDock';
+import { RightDockRail } from '@/components/RightDock/RightDockRail';
 import { ScheduledView } from '@/components/ScheduledView';
 import { SearchBar } from '@/components/Search/SearchBar';
 import type { ClassificationRulePrefill } from '@/components/Settings/ClassificationSettings';
@@ -57,7 +59,6 @@ import * as api from '@/lib/api';
 import { sanitizeAvailableUpdate, type UpdateAvailablePayload } from '@/lib/appUpdate';
 import { DEFAULT_CATEGORIES, VALID_CATEGORIES } from '@/lib/categories';
 import { deriveChatContext } from '@/lib/chatContext';
-import { chatDockMode } from '@/lib/chatPanelLayout';
 import { type ChatToolEffectPayload, handleChatToolEffect } from '@/lib/chatToolEffects';
 import { plainTextToHtml, plainTextToParagraphsHtml } from '@/lib/composeHtml';
 import { freshDraftToOpen } from '@/lib/draftOpen';
@@ -68,6 +69,7 @@ import { showGpuRuntimeNotice } from '@/lib/gpuRuntimeNotice';
 import { mailboxTitle } from '@/lib/mailboxTitle';
 import { restoredBodyHtml } from '@/lib/outbox';
 import { createThrottle } from '@/lib/refreshScheduling';
+import { parseRightDockContent, type RightDockContent, railButtons, rightDockMode } from '@/lib/rightDockLayout';
 import { isTagBoardDensity, isTagBoardType, type TagBoardDensity, type TagBoardType } from '@/lib/tagBoard';
 import {
   baseViewToken,
@@ -270,14 +272,27 @@ function AppInner() {
     [setLensesEnabledRaw],
   );
   const [isInboxCollapsed, setIsInboxCollapsed] = useState(false);
-  // Right-docked chat panel. Persisted so the workspace layout survives a
-  // restart, the same way `inbox_layout` does.
+  // Right dock: the chat panel or the calendar agenda, one at a time.
+  // Persisted so the workspace layout survives a restart, the same way
+  // `inbox_layout` does (`chat_panel_open` keeps its historical name).
   // Docked by default: chat is a primary surface, and a panel that starts
   // hidden makes it look absent. Persisted, so closing it sticks.
-  const [isChatPanelOpen, setIsChatPanelOpen] = usePersistedPref<boolean>('chat_panel_open', true, {
+  const [isRightDockOpen, setIsRightDockOpen] = usePersistedPref<boolean>('chat_panel_open', true, {
     parse: (raw) => (raw === 'true' ? true : raw === 'false' ? false : null),
     serialize: (v) => String(v),
   });
+  const [rightDockContent, setRightDockContent] = usePersistedPref<RightDockContent>('right_dock_content', 'chat', {
+    parse: parseRightDockContent,
+    serialize: (v) => v,
+  });
+  const openRightDock = useCallback(
+    (content: RightDockContent) => {
+      setRightDockContent(content);
+      setIsRightDockOpen(true);
+    },
+    [setRightDockContent, setIsRightDockOpen],
+  );
+  const closeRightDock = useCallback(() => setIsRightDockOpen(false), [setIsRightDockOpen]);
   // Account the chat surfaces answer from. Chat is scoped to ONE account; in
   // unified ("All accounts") mode `effectiveAccountId` is merely the first
   // enabled one, so the user can retarget it independently of the list.
@@ -418,10 +433,14 @@ function AppInner() {
     void loadCalendarIntegration(accounts);
   }, [accounts, loadCalendarIntegration]);
   const calendarFeeds = useCalendarIntegrationStore((s) => s.feedsByAccount);
+  // The full calendar view needs an account with an enabled calendar; the
+  // sidebar entry and the docked agenda only need an account at all, since
+  // the panel is where an IMAP account learns how to subscribe to a feed.
   const calendarFeatureEnabled = useMemo(
     () => calendarEnabledAccounts(accounts, calendarIntegrationIds, calendarFeeds).length > 0,
     [accounts, calendarIntegrationIds, calendarFeeds],
   );
+  const calendarPanelAvailable = useMemo(() => accounts.some((a) => a.enabled), [accounts]);
   // Leaving the calendar view when its last account gets switched off.
   useEffect(() => {
     if (viewMode === 'calendar' && calendarIntegrationLoaded && !calendarFeatureEnabled) setViewMode('inbox');
@@ -1472,14 +1491,14 @@ function AppInner() {
 
   const handleNewChat = useCallback(async () => {
     if (viewMode === 'chat') setViewMode('inbox');
-    setIsChatPanelOpen(true);
+    openRightDock('chat');
     if (!effectiveAccountId) return;
     try {
       await useChatStore.getState().createConversation(effectiveAccountId);
     } catch (e) {
       addLog('error', 'ai', `Failed to start a new chat: ${errorText(e)}`);
     }
-  }, [viewMode, effectiveAccountId, setIsChatPanelOpen, addLog]);
+  }, [viewMode, effectiveAccountId, openRightDock, addLog]);
 
   const handleAddAccount = async (syncFromTimestamp: number | null) => {
     const provider = pendingOAuthProvider;
@@ -1532,7 +1551,17 @@ function AppInner() {
     }
   };
 
-  const chatDock = chatDockMode({ aiEnabled, panelOpen: isChatPanelOpen, fullChatView: viewMode === 'chat' });
+  const rightDockState = {
+    aiEnabled,
+    calendarAvailable: calendarPanelAvailable,
+    panelOpen: isRightDockOpen,
+    content: rightDockContent,
+    fullChatView: viewMode === 'chat',
+    fullCalendarView: viewMode === 'calendar',
+  };
+  const rightDock = rightDockMode(rightDockState);
+  const isChatPanelOpen = rightDock.kind === 'panel' && rightDock.content === 'chat';
+  const isCalendarPanelOpen = rightDock.kind === 'panel' && rightDock.content === 'calendar';
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
@@ -1596,7 +1625,9 @@ function AppInner() {
           lensesEnabled={lensesEnabled}
           skillsEnabled={skillsEnabled}
           sharedDocsEnabled={sharedDocsEnabled}
-          calendarEnabled={calendarFeatureEnabled}
+          calendarEntry={calendarPanelAvailable}
+          calendarActive={viewMode === 'calendar' || isCalendarPanelOpen}
+          onOpenCalendarPanel={() => openRightDock('calendar')}
           onSelectLens={(lensId) => {
             // Selecting a lens in the sidebar: fire the store action so the
             // Lenses view picks it up (it already subscribes to activeLensId),
@@ -1841,7 +1872,7 @@ function AppInner() {
                       aiEnabled
                         ? isChatPanelOpen
                           ? () => void handleNewChat()
-                          : () => setIsChatPanelOpen(true)
+                          : () => openRightDock('chat')
                         : undefined
                     }
                     onOpenInTab={openTab}
@@ -1922,25 +1953,42 @@ function AppInner() {
           )}
         </main>
 
-        {/* Right-docked chat. Gated on the master AI switch like every other
-            AI surface, and suppressed while the full-page chat view is open so
-            the same conversation isn't rendered twice side by side. Collapsed,
-            it leaves a rail to reopen it from any view. */}
-        {chatDock === 'rail' && <ChatPanelRail onOpen={() => setIsChatPanelOpen(true)} />}
-        {chatDock === 'panel' && (
-          <ChatPanelDock
-            accountId={chatAccountId}
-            onAccountChange={handleChatAccountChange}
-            context={chatPanelContext}
-            onClose={() => setIsChatPanelOpen(false)}
-            onExpand={() => {
-              setIsChatPanelOpen(false);
-              setViewMode('chat');
-            }}
-            onNavigateToInbox={() => setViewMode('inbox')}
-            onShowEmailsInList={handleShowChatEmailsInList}
-            onOpenAiSettings={() => setSettingsTab('ai')}
-          />
+        {/* Right dock: the chat panel (gated on the master AI switch like
+            every other AI surface, and suppressed while the full-page chat is
+            open so the same conversation isn't rendered twice) or the calendar
+            agenda (suppressed while the full calendar view is open). Collapsed,
+            it leaves a rail — chat button, calendar button below it — to
+            reopen either from any view. */}
+        {rightDock.kind === 'rail' && <RightDockRail buttons={railButtons(rightDockState)} onOpen={openRightDock} />}
+        {rightDock.kind === 'panel' && (
+          <RightDock>
+            {rightDock.content === 'chat' ? (
+              <ChatPanel
+                accountId={chatAccountId}
+                onAccountChange={handleChatAccountChange}
+                context={chatPanelContext}
+                onClose={closeRightDock}
+                onExpand={() => {
+                  closeRightDock();
+                  setViewMode('chat');
+                }}
+                onNavigateToInbox={() => setViewMode('inbox')}
+                onShowEmailsInList={handleShowChatEmailsInList}
+                onOpenAiSettings={() => setSettingsTab('ai')}
+              />
+            ) : (
+              <CalendarPanel
+                accounts={accounts}
+                defaultAccountId={effectiveAccountId}
+                onClose={closeRightDock}
+                onOpenFullCalendar={() => {
+                  closeRightDock();
+                  setViewMode('calendar');
+                }}
+                onOpenSettings={() => setSettingsTab('calendar')}
+              />
+            )}
+          </RightDock>
         )}
       </div>
 
