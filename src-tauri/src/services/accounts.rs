@@ -136,6 +136,18 @@ pub fn remove_account(db: &Arc<Database>, account_id: &str, app_data_dir: &std::
         .flatten()
         .map(|a| a.provider == "imap")
         .unwrap_or(false);
+    // Feed rows cascade with the account, their URLs in the vault do not.
+    let feed_ids: Vec<String> = match db.list_calendar_feeds(account_id) {
+        Ok(feeds) => feeds.into_iter().map(|f| f.id).collect(),
+        Err(e) => {
+            logger::log(
+                "error",
+                "account",
+                format!("Could not list the account's calendar feeds: {e}"),
+            );
+            Vec::new()
+        }
+    };
 
     // The DB is the source of truth for whether the account exists, so it goes
     // FIRST and its failure aborts the removal. Tearing credentials down first
@@ -160,6 +172,17 @@ pub fn remove_account(db: &Arc<Database>, account_id: &str, app_data_dir: &std::
             "account",
             format!("Account removed, but clearing its stored credentials failed: {e}"),
         );
+    }
+    for feed_id in &feed_ids {
+        if let Err(e) =
+            super::secrets_vault::delete(crate::sync::ics_feed_calendar::CALENDAR_FEED_KEYRING_SERVICE, feed_id)
+        {
+            logger::log(
+                "error",
+                "account",
+                format!("Account removed, but clearing its calendar feed URL from the vault failed: {e}"),
+            );
+        }
     }
 
     // Per-account preferences have no FK to `accounts`, so the cascade above
@@ -1745,6 +1768,31 @@ mod tests {
     // unusable AND undeletable, because every retry hit the same failure. The DB
     // is the source of truth, so it must go first; credential cleanup afterwards
     // can only leak, never block the delete.
+    #[test]
+    fn remove_account_clears_calendar_feed_urls_from_the_vault() {
+        let _seam = seam_test_lock();
+        let _guard = CRED_STORE_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+        let db = Arc::new(Database::new_for_testing().expect("test db"));
+        keychain::install(Arc::new(keychain::InMemoryKeychain::new()));
+        secrets_vault::reset_for_testing();
+        db.seed_test_account_with_provider("acc-feeds", "imap");
+        db.insert_calendar_feed(&crate::models::CalendarFeed {
+            id: "feed-1".into(),
+            account_id: "acc-feeds".into(),
+            label: "Shared".into(),
+            host: "cal.example.com".into(),
+            created_at: 1,
+        })
+        .expect("insert feed");
+        let service = crate::sync::ics_feed_calendar::CALENDAR_FEED_KEYRING_SERVICE;
+        secrets_vault::set(service, "feed-1", "https://cal.example.com/x.ics").expect("vault");
+
+        remove_account(&db, "acc-feeds", std::path::Path::new("/nonexistent")).expect("remove");
+
+        assert_eq!(secrets_vault::get(service, "feed-1").expect("vault"), None);
+        assert!(db.get_account("acc-feeds").expect("get").is_none());
+    }
+
     #[test]
     fn remove_account_deletes_the_account_even_when_keychain_teardown_fails() {
         let _seam = seam_test_lock();

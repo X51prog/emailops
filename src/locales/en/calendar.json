@@ -103,5 +103,16 @@
   "calendars": {
     "hideOne": "Hide {{name}}",
     "showOne": "Show {{name}}"
+  },
+  "createInProton": "Opening Proton Calendar to create the event — pick the time and calendar there (the shared feed is read-only; changes show up here within a few hours).",
+  "panel": {
+    "title": "Agenda",
+    "open": "Open the calendar panel",
+    "close": "Close the calendar panel",
+    "openFull": "Open full calendar",
+    "setupTitle": "No calendar yet for this account",
+    "setupBody": "IMAP accounts show a calendar once you subscribe to a calendar feed (for Proton Calendar, its share-via-link URL) in Settings → Calendar.",
+    "setupButton": "Set up in Settings",
+    "addEvent": "New event on this day"
   }
 }

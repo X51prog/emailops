@@ -13,7 +13,7 @@ WebDriver transport (DOM inside the real app), `$V snap/click/type` the cua-driv
   embeddings present, AI on (embedded llama.cpp, `qwen3.5-4b-q4_k_m`). A third,
   credential-less Gmail account `ulises.emailopslabs@gmail.com` (`demo-acct-calendar`) owns
   the demo calendar `demo-cal-work` (six events around today; tomorrow 10:00 is "Sprint 6
-  planning — Faro Logistics") because calendar features are only offered to Gmail/Outlook.
+  planning — Faro Logistics") because IMAP accounts only get a calendar through a subscribed ICS feed, and the demo accounts have none.
 - The instance holds no remote-provider key: `launch` starts it with `OPENROUTER_API_KEY` set and empty, so the
   developer's key in `.env.local` is not loaded and nothing in the UI can reach OpenRouter.
 - Verification fixtures (`insert_verification_fixtures` in `scripts/generate_demo_db.py`): a trashed quote and its

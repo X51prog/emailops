@@ -103,5 +103,16 @@
   "calendars": {
     "hideOne": "Ocultar {{name}}",
     "showOne": "Mostrar {{name}}"
+  },
+  "createInProton": "Abriendo Proton Calendar para crear el evento: elige allí la hora y el calendario (el feed compartido es de solo lectura; los cambios aparecen aquí en unas horas).",
+  "panel": {
+    "title": "Agenda",
+    "open": "Abrir el panel de calendario",
+    "close": "Cerrar el panel de calendario",
+    "openFull": "Abrir calendario completo",
+    "setupTitle": "Esta cuenta aún no tiene calendario",
+    "setupBody": "Las cuentas IMAP muestran un calendario cuando te suscribes a un feed de calendario (en Proton Calendar, su enlace de compartir) en Ajustes → Calendario.",
+    "setupButton": "Configurar en Ajustes",
+    "addEvent": "Nuevo evento en este día"
   }
 }

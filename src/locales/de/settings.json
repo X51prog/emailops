@@ -526,8 +526,8 @@
   },
   "calendar": {
     "accountsLabel": "Kalender-Konten",
-    "accountsDesc": "Die Kalender-Integration ist für Gmail- und Outlook-Konten standardmäßig aktiviert und schaltet sich selbst ab, wenn ein Konto keine Kalender-Berechtigung erteilt hat. Nur aktivierte Konten erhalten die Kalenderansicht, Einladungskarten, Meeting-Benachrichtigungen und das Kalender-Tool im Chat.",
-    "noCapableAccounts": "Verbinde ein Gmail- oder Outlook-Konto, um den Kalender zu nutzen.",
+    "accountsDesc": "Die Kalenderintegration ist für Gmail- und Outlook-Konten standardmäßig aktiv, für IMAP-Konten sobald sie unten einen Kalender-Feed abonnieren. Sie schaltet sich selbst ab, wenn ein Konto keine Kalenderberechtigung erteilt hat. Nur aktivierte Konten erhalten die Kalenderansicht, Einladungskarten, Besprechungserinnerungen und das Kalender-Werkzeug im Chat.",
+    "noCapableAccounts": "Verbinde ein Gmail- oder Outlook-Konto oder abonniere unten mit einem IMAP-Konto einen Kalender-Feed, um den Kalender zu nutzen.",
     "accountToggleAria": "Kalender-Integration für {{email}} umschalten",
     "notificationsLabel": "Meeting-Benachrichtigungen",
     "notificationsDesc": "Werde vor einem anstehenden Meeting benachrichtigt, mit direktem Teilnahme-Link.",
@@ -536,7 +536,17 @@
     "leadTimeLabel": "Vorlaufzeit der Benachrichtigung",
     "leadTimeDesc": "Wie lange vor Beginn des Meetings die Benachrichtigung erscheint.",
     "minutesOption": "{{n}} Minuten",
-    "primaryCalendar": "primär"
+    "primaryCalendar": "primär",
+    "feedsLabel": "Kalender-Feeds (IMAP-Konten)",
+    "feedsDesc": "Abonniere mit einem IMAP-Konto einen veröffentlichten Kalender (ICS-URL). Der Kalender ist schreibgeschützt und wird alle paar Minuten aktualisiert; der Link bleibt in deinem Schlüsselbund.",
+    "feedLabelPlaceholder": "Name (optional)",
+    "feedUrlPlaceholder": "https://…/calendar.ics",
+    "addFeed": "Hinzufügen",
+    "addingFeed": "Wird hinzugefügt…",
+    "removeFeed": "Entfernen",
+    "removeFeedAria": "Kalender-Feed {{label}} entfernen",
+    "noFeeds": "Noch keine Kalender-Feeds.",
+    "protonHelp": "Proton Calendar: Öffne in der Web-App die Kalendereinstellungen → Per Link teilen → erstelle einen Link mit vollständiger Ansicht und füge ihn hier ein. Proton veröffentlicht Änderungen mit bis zu einigen Stunden Verzögerung."
   },
   "aiTranslation": {
     "enable": "KI-Übersetzung aktivieren",

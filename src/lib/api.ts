@@ -20,6 +20,7 @@ import type {
   BlockedSender,
   Calendar,
   CalendarEvent,
+  CalendarFeed,
   CalendarInvite,
   CatalogModel,
   ChatConversation,
@@ -1985,6 +1986,24 @@ export async function rsvpCalendarInvite(
  *  events stored. Errors are meaningful (e.g. auth needs re-consent). */
 export async function syncCalendarNow(accountId: string): Promise<number> {
   return invoke('sync_calendar_now', { accountId });
+}
+
+/** Subscribed ICS feeds of an IMAP account (label + host only; the URL stays
+ *  in the secrets vault). */
+export async function listCalendarFeeds(accountId: string): Promise<CalendarFeed[]> {
+  return invoke('list_calendar_feeds', { accountId });
+}
+
+/** Subscribe an IMAP account to a read-only ICS feed. The backend validates
+ *  and fetches the URL once, then syncs the new calendar right away. A blank
+ *  label takes the feed's own name. */
+export async function addCalendarFeed(accountId: string, label: string, url: string): Promise<CalendarFeed> {
+  return invoke('add_calendar_feed', { accountId, label, url });
+}
+
+/** Unsubscribe from a feed: its calendar, events and stored URL go with it. */
+export async function removeCalendarFeed(accountId: string, feedId: string): Promise<void> {
+  return invoke('remove_calendar_feed', { accountId, feedId });
 }
 
 // Dashboard

@@ -49,6 +49,7 @@
     "needs_reauth": "Authentication required — please sign in again.",
     "calendar_permission_denied": "This account has not granted calendar permission — sign in again and allow calendar access.",
     "not_found": "Not found: {{detail}}",
+    "read_only_calendar": "This calendar is a read-only subscription — change the event where it is published",
     "invalid_input": "Invalid input: {{detail}}",
     "ai": "AI error: {{detail}}",
     "ai_disabled": "AI is disabled. Enable it in Settings.",

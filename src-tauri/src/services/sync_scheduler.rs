@@ -255,8 +255,12 @@ impl SyncScheduler {
         let mut handles = vec![spawn_watcher(account.clone(), deps, sync_flag.clone())];
         let mut stop_flags = vec![sync_flag];
 
-        // Calendar poll loop — OAuth providers only (IMAP has no calendar).
-        if !plan_calendar_accounts(std::slice::from_ref(account)).is_empty() {
+        // Calendar poll loop for every account. Whether there is a calendar to
+        // poll (OAuth API, or an IMAP account's ICS feeds) is decided per tick
+        // in `make_calendar_sync_fn`, so the first feed a user adds starts
+        // syncing without a restart and without re-watching the account (which
+        // would drop its IMAP IDLE connection).
+        {
             let flag = Arc::new(AtomicBool::new(false));
             let sync_fn = make_calendar_sync_fn(deps.db.clone(), account.clone(), deps.app.clone());
             handles.push(tauri::async_runtime::spawn(calendar_poll_loop(
@@ -521,44 +525,25 @@ pub(crate) async fn gmail_poll_loop(
 /// How often each OAuth account's calendar window is re-fetched.
 const CALENDAR_POLL_INTERVAL: Duration = Duration::from_secs(300);
 
-/// Pure planner: the subset of accounts that get a calendar poll loop.
-/// Capability only (Gmail/Outlook) — loops spawn for every capable account so
-/// the Settings toggle takes effect without an app restart; each tick then
-/// checks the per-account opt-in via [`plan_calendar_enabled_accounts`] /
-/// `calendar_enabled_or_log`.
-pub(crate) fn plan_calendar_accounts(accounts: &[Account]) -> Vec<Account> {
-    accounts
-        .iter()
-        .filter(|a| crate::sync::calendar_provider::provider_supports_calendar(&a.provider))
-        .cloned()
-        .collect()
+/// Pure planner: the accounts that have a calendar at all (an OAuth API, or
+/// subscribed ICS feeds). `has_calendar` is injected — in prod it is
+/// `capability::calendar_capability`, which reads the feeds table — so the
+/// filter is unit-testable without a DB.
+pub(crate) fn plan_calendar_accounts(accounts: &[Account], has_calendar: &dyn Fn(&Account) -> bool) -> Vec<Account> {
+    accounts.iter().filter(|a| has_calendar(a)).cloned().collect()
 }
 
-/// Pure planner: capable accounts whose calendar integration the user opted
-/// into (`calendar.enabled:<account_id>` pref). `is_enabled` is injected so
-/// the filter is unit-testable without a DB.
-pub(crate) fn plan_calendar_enabled_accounts(accounts: &[Account], is_enabled: &dyn Fn(&str) -> bool) -> Vec<Account> {
-    plan_calendar_accounts(accounts)
+/// Pure planner: accounts with a calendar whose integration the user opted
+/// into (`calendar.enabled:<account_id>` pref).
+pub(crate) fn plan_calendar_enabled_accounts(
+    accounts: &[Account],
+    has_calendar: &dyn Fn(&Account) -> bool,
+    is_enabled: &dyn Fn(&str) -> bool,
+) -> Vec<Account> {
+    plan_calendar_accounts(accounts, has_calendar)
         .into_iter()
         .filter(|a| is_enabled(&a.id))
         .collect()
-}
-
-/// Read the per-account calendar opt-in, logging (once per tick) instead of
-/// discarding a pref-read failure. A failed read counts as disabled — never
-/// sync or notify on an account the user may not have opted in.
-fn calendar_enabled_or_log(db: &Database, account_id: &str) -> bool {
-    match db.calendar_enabled(account_id) {
-        Ok(enabled) => enabled,
-        Err(e) => {
-            crate::services::logger::log(
-                "error",
-                "sync",
-                format!("calendar: failed to read calendar.enabled pref for {account_id}: {e}"),
-            );
-            false
-        }
-    }
 }
 
 /// Poll the account's calendar every `interval`. The first tick fires
@@ -587,15 +572,15 @@ fn make_calendar_sync_fn(db: Arc<Database>, account: Account, app: AppHandle) ->
         let account = account.clone();
         let app = app.clone();
         Box::pin(async move {
-            // Per-tick opt-in check (not at spawn time) so flipping the
-            // Settings toggle starts/stops syncing without an app restart.
-            if !calendar_enabled_or_log(&db, &account.id) {
+            // Per-tick capability + opt-in check (not at spawn time) so adding
+            // a first ICS feed or flipping the Settings toggle starts/stops
+            // syncing without an app restart.
+            if !crate::services::calendar::capability::calendar_available(&db, &account) {
                 return;
             }
             let dedup_key = format!("calendar:{}", account.id);
             let now = chrono::Utc::now().timestamp();
-            let result = match crate::services::calendar::sync::build_calendar_provider(&account.id, &account.provider)
-            {
+            let result = match crate::services::calendar::sync::build_calendar_provider(&db, &account) {
                 Ok(provider) => {
                     crate::services::calendar::sync::sync_account_calendar(&db, &account.id, provider.as_ref(), now)
                         .await
@@ -736,10 +721,11 @@ async fn meeting_notification_loop(db: Arc<Database>, app: AppHandle, stop_flag:
         });
 
         let now = chrono::Utc::now().timestamp();
-        let accounts =
-            plan_calendar_enabled_accounts(&enabled_accounts(db.list_accounts().unwrap_or_default()), &|id| {
-                calendar_enabled_or_log(&db, id)
-            });
+        let accounts = plan_calendar_enabled_accounts(
+            &enabled_accounts(db.list_accounts().unwrap_or_default()),
+            &|a| crate::services::calendar::capability::calendar_available(&db, a),
+            &|_| true, // calendar_available already applied the opt-in pref
+        );
         for account in accounts {
             let events = match db.list_visible_calendar_events(&account.id, now, now + lead_secs + 60) {
                 Ok(events) => events,
@@ -1438,15 +1424,21 @@ mod tests {
     // ── plan_calendar_accounts ────────────────────────────────────────────────
 
     #[test]
-    fn calendar_accounts_are_oauth_only() {
+    fn calendar_accounts_include_imap_only_when_it_has_a_calendar() {
         let accounts = vec![
             make_account("g", "gmail", true),
             make_account("o", "outlook", true),
-            make_account("i", "imap", true),
+            make_account("i-feed", "imap", true),
+            make_account("i-none", "imap", true),
         ];
-        let planned = plan_calendar_accounts(&accounts);
+        // The capability check is injected (it reads the feeds table in prod).
+        let planned = plan_calendar_accounts(&accounts, &|a| a.provider != "imap" || a.id == "i-feed");
         let ids: Vec<&str> = planned.iter().map(|a| a.id.as_str()).collect();
-        assert_eq!(ids, vec!["g", "o"], "IMAP accounts have no calendar to poll");
+        assert_eq!(
+            ids,
+            vec!["g", "o", "i-feed"],
+            "IMAP polls only once it has a feed calendar"
+        );
     }
 
     #[test]
@@ -1456,10 +1448,15 @@ mod tests {
             make_account("g-off", "gmail", true),
             make_account("i", "imap", true),
         ];
-        // IMAP is excluded even if a stray pref claims it's enabled.
-        let planned = plan_calendar_enabled_accounts(&accounts, &|id| id == "g-on" || id == "i");
+        // An account without a calendar is excluded even if a stray pref claims it's enabled.
+        let planned =
+            plan_calendar_enabled_accounts(&accounts, &|a| a.provider != "imap", &|id| id == "g-on" || id == "i");
         let ids: Vec<&str> = planned.iter().map(|a| a.id.as_str()).collect();
-        assert_eq!(ids, vec!["g-on"], "only opted-in OAuth accounts get calendar work");
+        assert_eq!(
+            ids,
+            vec!["g-on"],
+            "only opted-in accounts with a calendar get calendar work"
+        );
     }
 
     // ── gmail_poll_loop ───────────────────────────────────────────────────────

@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { type ReactNode, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { usePersistedPref } from '@/hooks/usePersistedPref';
-import type { ChatContext } from '@/lib/chatContext';
 import {
   CHAT_PANEL_DEFAULT_WIDTH,
   CHAT_PANEL_MAX_WIDTH,
@@ -9,38 +8,22 @@ import {
   clampChatPanelWidth,
   parseChatPanelWidth,
 } from '@/lib/chatPanelLayout';
-import { ChatPanel } from './ChatPanel';
 
-interface ChatPanelDockProps {
-  accountId: string | null;
-  /** Retarget which account the chat searches. */
-  onAccountChange: (accountId: string) => void;
-  context: ChatContext | null;
-  onClose: () => void;
-  onExpand: () => void;
-  onNavigateToInbox?: () => void;
-  onShowEmailsInList?: (query: string) => void;
-  onOpenAiSettings?: () => void;
+interface RightDockProps {
+  children: ReactNode;
 }
 
 /** Keyboard resize step, matching the arrow-key convention of a native splitter. */
 const KEYBOARD_STEP = 16;
 
 /**
- * Docks {@link ChatPanel} against the right edge of the window and owns its
- * width: persisted to SQLite, drag-resizable from the left border, and
- * keyboard-resizable for anyone not using a pointer.
+ * Docks its content (the chat panel or the calendar agenda) against the right
+ * edge of the window and owns the width: persisted to SQLite under the
+ * historical `chat_panel_width` pref so an existing layout carries over,
+ * drag-resizable from the left border, keyboard-resizable for anyone not
+ * using a pointer.
  */
-export function ChatPanelDock({
-  accountId,
-  onAccountChange,
-  context,
-  onClose,
-  onExpand,
-  onNavigateToInbox,
-  onShowEmailsInList,
-  onOpenAiSettings,
-}: ChatPanelDockProps) {
+export function RightDock({ children }: RightDockProps) {
   const { t } = useTranslation('chat');
   const [width, setWidth] = usePersistedPref<number>('chat_panel_width', CHAT_PANEL_DEFAULT_WIDTH, {
     parse: parseChatPanelWidth,
@@ -51,7 +34,7 @@ export function ChatPanelDock({
   // Publish the dock's width so a non-blocking dialog can keep clear of it
   // (see `Modal`'s `nonBlocking`). A CSS variable rather than a prop: the
   // dialogs that need it are mounted in unrelated subtrees, and threading the
-  // width to each of them would couple every form to the chat panel.
+  // width to each of them would couple every form to the dock.
   useEffect(() => {
     const root = document.documentElement;
     root.style.setProperty('--chat-dock-width', `${width}px`);
@@ -111,18 +94,7 @@ export function ChatPanelDock({
         onKeyDown={onKeyDown}
         className="w-1 flex-shrink-0 cursor-col-resize bg-transparent transition-colors hover:bg-primary-300 focus:bg-primary-400 focus:outline-none"
       />
-      <div className="min-w-0 flex-1">
-        <ChatPanel
-          onAccountChange={onAccountChange}
-          accountId={accountId}
-          context={context}
-          onClose={onClose}
-          onExpand={onExpand}
-          onNavigateToInbox={onNavigateToInbox}
-          onShowEmailsInList={onShowEmailsInList}
-          onOpenAiSettings={onOpenAiSettings}
-        />
-      </div>
+      <div className="min-w-0 flex-1">{children}</div>
     </div>
   );
 }

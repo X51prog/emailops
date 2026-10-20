@@ -211,7 +211,8 @@ pub fn exit_code(err: &AppError) -> u8 {
         AppError::InvalidInput(_)
         | AppError::Skill(_)
         | AppError::AttachmentConfirmationRequired { .. }
-        | AppError::OutboxNotPending => 2,
+        | AppError::OutboxNotPending
+        | AppError::ReadOnlyCalendar => 2,
         AppError::NotFound(_) => 3,
         AppError::AuthError(_)
         | AppError::OAuthError(_)
@@ -1403,6 +1404,7 @@ mod tests {
     fn exit_code_groups_errors_by_remediation() {
         // input
         assert_eq!(exit_code(&AppError::InvalidInput("x".into())), 2);
+        assert_eq!(exit_code(&AppError::ReadOnlyCalendar), 2);
         assert_eq!(
             exit_code(&AppError::Skill(crate::services::skills::SkillProblem::NoName)),
             2

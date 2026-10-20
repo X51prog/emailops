@@ -13,6 +13,7 @@ mod embedded {
 pub mod accounts;
 pub mod attachments;
 pub mod calendar;
+pub mod calendar_feeds;
 pub mod calendars;
 pub mod chat;
 pub mod drafts;
@@ -758,11 +759,18 @@ impl Database {
     /// by a test keeps the in-memory DB consistent with prod.
     #[cfg(test)]
     pub(crate) fn seed_test_account(&self, id: &str) {
+        self.seed_test_account_with_provider(id, "gmail");
+    }
+
+    /// Like [`Self::seed_test_account`] with an explicit `accounts.provider`
+    /// (`"imap"` for feed-calendar fixtures).
+    #[cfg(test)]
+    pub(crate) fn seed_test_account_with_provider(&self, id: &str, provider: &str) {
         self.connection()
             .execute(
                 "INSERT OR IGNORE INTO accounts (id, provider, email, name, created_at)
-                 VALUES (?1, 'gmail', ?1, 'Test', 0)",
-                rusqlite::params![id],
+                 VALUES (?1, ?2, ?1, 'Test', 0)",
+                rusqlite::params![id, provider],
             )
             .expect("seed test account");
     }

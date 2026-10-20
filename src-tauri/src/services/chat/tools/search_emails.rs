@@ -124,10 +124,12 @@ to find mail the user received, drop `from` and search again.",
             );
         }
     }
-    let has_calendar = ctx.db.get_account(ctx.account_id).ok().flatten().is_some_and(|a| {
-        crate::sync::calendar_provider::provider_supports_calendar(&a.provider)
-            && ctx.db.calendar_enabled(&a.id).unwrap_or(false)
-    });
+    let has_calendar = ctx
+        .db
+        .get_account(ctx.account_id)
+        .ok()
+        .flatten()
+        .is_some_and(|a| crate::services::calendar::capability::calendar_available(ctx.db, &a));
     if has_calendar {
         out.push_str(
             " If the question is about a meeting or another scheduled event, call list_calendar_events \

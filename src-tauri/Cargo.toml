@@ -52,6 +52,8 @@ thiserror = "2"
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 chrono-tz = "0.10"
+# RFC 5545 recurrence expansion for ICS-feed calendars (sync::ics_feed_calendar).
+rrule = "0.14"
 # Pinned to 0.12 until `oauth2` ships a release whose `AsyncHttpClient`
 # impl is wired against reqwest 0.13 (5.0.0 still requires 0.12).
 reqwest = { version = "0.12", features = ["json", "stream"] }
